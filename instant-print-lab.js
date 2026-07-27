@@ -337,37 +337,53 @@
     ctx.restore();
   }
 
-  function drawShutterButton(ctx, x, y, r) {
+function drawShutterButton(ctx, x, y, r) {
     ctx.save();
-   
+
+    // 바깥 금속 링
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#e2e2df";
+    ctx.fill();
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.22)";
     ctx.stroke();
 
+    // 안쪽 버튼
     ctx.beginPath();
     ctx.arc(x, y, r * 0.86, 0, Math.PI * 2);
-    var grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 0.86);
+
+    var grad = ctx.createRadialGradient(
+        x - r * 0.3,
+        y - r * 0.35,
+        r * 0.1,
+        x,
+        y,
+        r * 0.86
+    );
+
     grad.addColorStop(0, "#ffffff");
     grad.addColorStop(0.55, "#cfcfcb");
     grad.addColorStop(1, "#a5a5a0");
+
     ctx.fillStyle = grad;
     ctx.fill();
 
+    // 가운데 음영
     ctx.beginPath();
     ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.16)";
     ctx.fill();
 
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.fill();
-    ctx.restore();
-
+    // 하이라이트
     ctx.beginPath();
-ctx.arc(x,y,r*0.88,0,Math.PI*2);
-ctx.strokeStyle="rgba(255,255,255,.45)";
-ctx.lineWidth=1;
-ctx.stroke();
-  }
+    ctx.arc(x, y, r * 0.88, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,.45)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.restore();
+}
 
   function drawStatusLED(ctx, x, y, w, h) {
     ctx.save();

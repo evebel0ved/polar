@@ -337,40 +337,35 @@
     ctx.restore();
   }
 
-  function drawShutterButton(ctx, x, y, r) {
+ function drawShutterButton(ctx, x, y, r) {
     ctx.save();
+    
+    // 바깥쪽 얇은 테두리
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#e2e2df";
+    ctx.fillStyle = "#cccccc"; 
     ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(0,0,0,0.22)";
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
     ctx.stroke();
 
+    // 납작한 안쪽 버튼면
     ctx.beginPath();
-    ctx.arc(x, y, r * 0.86, 0, Math.PI * 2);
-    var grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 0.86);
-    grad.addColorStop(0, "#ffffff");
-    grad.addColorStop(0.55, "#cfcfcb");
-    grad.addColorStop(1, "#a5a5a0");
-    ctx.fillStyle = grad;
+    ctx.arc(x, y, r * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = "#e6e6e6"; // 단색에 가까운 밝은 톤
     ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.16)";
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.ellipse(x - r * 0.3, y - r * 0.34, r * 0.28, r * 0.15, -0.6, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.fill();
+    
+    // 미세한 빛 반사 테두리만 추가하여 평면적인 느낌 강조
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.stroke();
+    
     ctx.restore();
   }
 
   function drawStatusLED(ctx, x, y, w, h) {
     ctx.save();
-    roundRectPath(ctx, x, y, w, h, w * 0.35);
+    roundRectPath(ctx, x, y, w, h, w / 2);
     var grad = ctx.createLinearGradient(x, y, x, y + h);
     grad.addColorStop(0, "#d85d4f");
     grad.addColorStop(0.5, "#b5382a");
@@ -514,7 +509,7 @@
     ctx.fill();
     ctx.restore();
   }
-
+  
   function drawCamera(ctx, colorDef) {
     var L = LAYOUT;
     var body = colorDef.body;
@@ -537,10 +532,11 @@
     ctx.fill();
     ctx.restore();
 
+
     // body edge line
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = shade(body, isDark ? 14 : -14);
+    ctx.lineWidth = bw * 0.015; // 테두리를 더 두껍게
+    ctx.strokeStyle = "#e0e0e0"; // 연한 회색/흰색 테두리로 변경
     ctx.stroke();
 
     // faint top hardware — strap lug (left) and geared advance dial with
@@ -569,7 +565,16 @@
 
     var shY = by + L.shoulderH * 0.56;
 
-    // red logo dot (no lettering)
+    // 텍스트
+    ctx.save();
+    ctx.font = "bold " + (bw * 0.032) + "px 'Helvetica Neue', Helvetica, sans-serif";
+    ctx.fillStyle = "#ffffff"; // 흰색 글씨
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("POLAROID", bx + bw * 0.06, shY);
+    ctx.restore();
+    
+    // red logo dot 
     drawLogoDot(ctx, bx + bw * 0.354, shY, bw * 0.038);
 
     // grey sensor / viewfinder window
@@ -580,15 +585,26 @@
     drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
     // red vertical status LED
-    drawStatusLED(ctx, bx + bw * 0.771 - bw * 0.009, shY - L.shoulderH * 0.33, bw * 0.018, L.shoulderH * 0.62);
+    drawStatusLED(ctx, bx + bw * 0.725, shY - L.shoulderH * 0.12, bw * 0.015, L.shoulderH * 0.25);
 
     // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);
 
     // bottom-left toggle knob
     var c = cameraCenter();
-    drawToggleKnob(ctx, bx + bw * 0.171, by + bh * 0.79, bw * 0.054, body, isDark);
+    drawToggleKnob(ctx, bx + bw * 0.11, by + bh * 0.84, bw * 0.054, body, isDark);
 
+    // 바디 하이라이트 
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(bx + 2, by + bh * 0.35);
+    ctx.lineTo(bx + bw * 0.45, by + bh - 2);
+    ctx.lineTo(bx + 2, by + bh - 2); 
+    ctx.closePath();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.25)"; 
+    ctx.fill();
+    ctx.restore();
+    
     // lens assembly
     drawLens(ctx, c.cx, c.cy, bw * 0.237);
 

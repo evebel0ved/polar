@@ -642,124 +642,50 @@
 // Leica 스타일 동심원
 
 ctx.strokeStyle = "#3d3d3d";
-var knInner = R * 0.72;
+
+var knInner = R * 0.33;
+
 for (let i = 0; i < 18; i++) {
 
     let rr = R - 8 - i * 6;
 
-    if (rr < R * 0.33) break;
+    if (rr < knInner) break;
 
     ctx.beginPath();
-
-    ctx.arc(
-        cx,
-        cy,
-        rr,
-        0,
-        Math.PI * 2
-    );
-
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
     ctx.lineWidth = 2;
-
     ctx.stroke();
-
 }
-    ctx.beginPath();
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
 
-    // smooth recessed ring (focus collar) between the knurl and the dome
-    var smoothOuter = knInner, smoothInner = R * 0.6;
-    ctx.beginPath();
-    ctx.arc(cx, cy, (smoothOuter + smoothInner) / 2, 0, Math.PI * 2);
-    ctx.lineWidth = smoothOuter - smoothInner;
-    var ringGrad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-    ringGrad.addColorStop(0, "#232220");
-    ringGrad.addColorStop(0.5, "#141312");
-    ringGrad.addColorStop(1, "#050505");
-    ctx.strokeStyle = ringGrad;
-    ctx.stroke();
+// 마지막 동심원
+ctx.beginPath();
+ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
+ctx.strokeStyle = "rgba(255,255,255,0.1)";
+ctx.lineWidth = 1;
+ctx.stroke();
 
-    // screws around the smooth ring
-    var screwR = (smoothOuter + smoothInner) / 2;
-    [30, 150, 210, 330].forEach(function (deg) {
-      var a = (deg * Math.PI) / 180;
-      var sx = cx + Math.cos(a) * screwR, sy = cy + Math.sin(a) * screwR;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(sx - 2.6, sy);
-      ctx.lineTo(sx + 2.6, sy);
-      ctx.strokeStyle = "rgba(255,255,255,0.2)";
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-    });
+// 가운데 검정 원
+ctx.beginPath();
+ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
 
-    // aperture-blade facets ring, just outside the glass dome
-    var facetR = R * 0.56;
-    var facetCount = 14;
-    for (var f = 0; f < facetCount; f++) {
-      var fa = (f / facetCount) * Math.PI * 2;
-      var fa2 = ((f + 1) / facetCount) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, facetR, fa, fa2);
-      ctx.closePath();
-      ctx.fillStyle = f % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.12)";
-      ctx.fill();
-    }
+var centerGrad = ctx.createRadialGradient(
+    cx - knInner * 0.25,
+    cy - knInner * 0.25,
+    knInner * 0.08,
+    cx,
+    cy,
+    knInner
+);
 
-    // glossy black lens dome
-    var gR = R * 0.54;
-    ctx.beginPath();
-    ctx.arc(cx, cy, gR, 0, Math.PI * 2);
-    var glassGrad = ctx.createRadialGradient(cx, cy, gR * 0.05, cx, cy, gR);
-    glassGrad.addColorStop(0, "#26292c");
-    glassGrad.addColorStop(0.7, "#131516");
-    glassGrad.addColorStop(1, "#040404");
-    ctx.fillStyle = glassGrad;
-    ctx.fill();
+centerGrad.addColorStop(0, "#1d1d1d");
+centerGrad.addColorStop(0.5, "#0c0c0c");
+centerGrad.addColorStop(1, "#000000");
 
-    // fine concentric grooves inside the dome
-    for (var gc = 1; gc <= 8; gc++) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, gR * (gc / 9), 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    // small centered pin (lens axis screw)
-    ctx.beginPath();
-    ctx.arc(cx, cy, gR * 0.08, 0, Math.PI * 2);
-    var pinGrad = ctx.createRadialGradient(cx, cy, 1, cx, cy, gR * 0.08);
-    pinGrad.addColorStop(0, "#3d4144");
-    pinGrad.addColorStop(1, "#0a0b0c");
-    ctx.fillStyle = pinGrad;
-    ctx.fill();
-
-    // broad, soft highlight sweep across the upper-left of the whole lens —
-    // the only source of "shine", so the dome reads as flat matte glass
-    // rather than a glossy eye
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.clip();
-    var sweep = ctx.createLinearGradient(cx - R, cy - R, cx + R * 0.2, cy + R * 0.2);
-    sweep.addColorStop(0, "rgba(255,255,255,0.16)");
-    sweep.addColorStop(0.3, "rgba(255,255,255,0.04)");
-    sweep.addColorStop(0.5, "rgba(255,255,255,0)");
-    ctx.fillStyle = sweep;
-    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-    ctx.restore();
-
-    ctx.restore();
+ctx.fillStyle = centerGrad;
+ctx.fill();
+    
+    ctx.restore(); 
   }
-
   // ---------------------------------------------------------------------
   // Polaroid card (orientation aware)
   // ---------------------------------------------------------------------

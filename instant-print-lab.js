@@ -168,12 +168,6 @@
   // composition). W is always 1400; H is 800 for horizontal or 1400
   // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
-  // Approx. how far the photo card's own drop-shadow (shadowBlur 32,
-  // shadowOffsetY 10) spreads above the card's top edge — used to keep
-  // the card's retracted start position tucked behind the camera body
-  // instead of flush with its top edge (see cardTopAt).
-  var CARD_SHADOW_TOP_INSET = 28;
-
   // Small fixed top/bottom margin for vertical layout — replaces the old
   // approach of centering the content in a much taller square canvas,
   // which produced ~250px of empty space on each side. Kept just large
@@ -240,17 +234,18 @@
   // export, which reads W/H at save time) always matches what's selected.
   function applyOrientationDims(orientation) {
     if (orientation === "vertical") {
-      // Previously a fixed 1400 square, which left roughly 250px of
-      // empty space above AND below the camera+card group (it was
-      // centered in a canvas much taller than the content actually
-      // needs). Now sized directly off the real content height (camera
-      // body + ejected card, at vertical layout's proportions) plus a
-      // small fixed margin on each side, so the canvas hugs the content
-      // instead of floating it in a mostly-empty square.
+      // Square canvas (W === H), sized directly off the real content
+      // height (camera body + ejected card, at vertical layout's
+      // proportions) plus VERTICAL_MARGIN on each side. Previously only
+      // H was tightened here while W stayed fixed at 1400 (horizontal
+      // mode's width), which left the "square" vertical canvas actually
+      // a 1400x977 rectangle. Deriving both from the same content-based
+      // side length keeps it genuinely square with margins that scale
+      // with VERTICAL_MARGIN instead of leftover horizontal-mode width.
       var vs = 580 / 620;
       var contentH = 424 * vs + CARD_DIMS.vertical.h;
-      W = 1400;
-      H = Math.round(contentH + VERTICAL_MARGIN * 2);
+      var side = Math.round(contentH + VERTICAL_MARGIN * 2);
+      W = side; H = side;
     } else {
       W = 1400; H = 800;  // shorter canvas — less empty space above/below
     }
@@ -271,7 +266,12 @@
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
-    var endX = rightEdge - 60;
+    // Reduced from 60 to 20: at full eject (e=1) the card now sits
+    // further right, showing more of the printed photo out from under
+    // the camera body instead of leaving 60px of it still tucked
+    // underneath. Still keeps a small (20px) overlap so the card visibly
+    // connects to the camera rather than looking fully detached.
+    var endX = rightEdge - 20;
     return lerp(startX, endX, e);
   }
 
@@ -280,15 +280,17 @@
   // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
-    // Clamped to L.bodyY + CARD_SHADOW_TOP_INSET rather than flush with
-    // L.bodyY: the card's drop-shadow (blur 32, offsetY 10) spreads
-    // roughly 22px above its own top edge. When the card's top landed
-    // exactly on the body's top edge, that shadow spread poked out above
-    // the (opaque) camera body — visible as a stray shadow sliver at the
-    // very start of the eject animation. Insetting the start position
-    // keeps the card's top, and therefore its shadow spread, behind the
-    // camera body until it has actually started sliding out.
-    var startY = Math.max(bodyBottom - cardH + 56, L.bodyY + CARD_SHADOW_TOP_INSET);
+    // Start position moved up to just L.bodyY (flush with the camera's
+    // top edge) instead of L.bodyY + CARD_SHADOW_TOP_INSET. This used to
+    // need that extra inset so the card's own drop-shadow spread
+    // (~22px) wouldn't bleed out above the camera's top edge at the
+    // start of the eject — but drawPhotoCard now hard-clips the card
+    // (fill and shadow both) to L.bodyY and below, so nothing can render
+    // above the camera regardless of how high the card starts. That
+    // clip is what actually prevents the leak now; this position just
+    // controls how much of the card peeks out from under the camera at
+    // the very start of the animation.
+    var startY = Math.max(bodyBottom - cardH + 56, L.bodyY);
     var endY = bodyBottom;
     return lerp(startY, endY, e);
   }
@@ -956,6 +958,21 @@ ctx.fill();
     var serial = (serialText || "").trim() || "N° 01";
 
     ctx.save();
+    if (orientation === "vertical") {
+      // Hard clip at the camera body's top edge: nothing drawn for this
+      // card (fill OR its drop-shadow) can render above L.bodyY. Applied
+      // in world space, before the stack-rotation transform below, so it
+      // holds regardless of stack.rot. This is what actually guarantees
+      // the card never visibly pokes out above the camera — previously
+      // that guarantee came only from keeping cardTopAt's start position
+      // far enough below L.bodyY to out-run the shadow's own spread,
+      // which capped how early the eject animation could start. With the
+      // clip in place, cardTopAt is free to start much closer to the
+      // body's top edge.
+      ctx.beginPath();
+      ctx.rect(0, L.bodyY, W, H - L.bodyY);
+      ctx.clip();
+    }
     if (stack.rot) {
       var rcx = left + dims.w / 2, rcy = top + dims.h / 2;
       ctx.translate(rcx, rcy);
@@ -1846,17 +1863,47 @@ ctx.fill();
         var photoCountForHold = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var holdMs = photoCountForHold > 1 ? 1200 : 900;
         var animMs = state.gifSeconds * 1000;
-        var start = null;
+
+        // Fixed-timestep frame schedule instead of driving the animation
+        // off real rAF wall-clock deltas. The old tick() computed
+        // `t = elapsed / animMs` from `now` on every rAF callback — but
+        // rAF firing isn't perfectly even (a busy main thread, GC pause,
+        // or a slow paint can delay/skip a callback), and MediaRecorder
+        // doesn't know or care about that: it just samples whatever the
+        // canvas currently shows at its own cadence, so any uneven gap
+        // between renders shows up as a stutter/hitch in the recorded
+        // video even though the on-screen *preview* (which isn't going
+        // through an encoder) never showed one. Precomputing an evenly
+        // spaced phase list up front — same approach already used for
+        // the GIF export above — and pacing delivery with setTimeout at
+        // a fixed target interval makes every frame land at an exact,
+        // predictable spot regardless of how bursty rendering actually
+        // is on the device.
+        var recordFps = 30;
+        var frameIntervalMs = 1000 / recordFps;
+        var animFrameCount = Math.max(1, Math.round(animMs / frameIntervalMs));
+        var holdFrameCount = Math.max(1, Math.round(holdMs / frameIntervalMs));
+        var frameTs = [];
+        for (var vf = 0; vf <= animFrameCount; vf++) frameTs.push(vf / animFrameCount);
+        for (var vh2 = 0; vh2 < holdFrameCount; vh2++) frameTs.push(1);
+
         recorder.start();
         statusText.textContent = "동영상 녹화 중…";
 
+        var frameIdx = 0;
+        var nextFrameAt = null;
         function tick(now) {
-          if (start === null) start = now;
-          var elapsed = now - start;
-          var t = clamp(elapsed / animMs, 0, 1);
-          renderScene(octx, t, state);
-          if (manualFrames) track.requestFrame();
-          if (elapsed < animMs + holdMs) {
+          if (nextFrameAt === null) nextFrameAt = now;
+          if (now >= nextFrameAt) {
+            renderScene(octx, frameTs[frameIdx], state);
+            if (manualFrames) track.requestFrame();
+            frameIdx++;
+            nextFrameAt += frameIntervalMs;
+            // if we fell behind (e.g. a long pause), resync instead of
+            // firing a burst of catch-up frames back-to-back
+            if (nextFrameAt < now) nextFrameAt = now + frameIntervalMs;
+          }
+          if (frameIdx < frameTs.length) {
             requestAnimationFrame(tick);
           } else {
             renderScene(octx, 1, state);

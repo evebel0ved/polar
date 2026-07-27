@@ -639,23 +639,31 @@
     ctx.fill();
 
     // outer knurled ring band (dense fine ridges, like a focus/filter ring)
-    var knOuter = R, knInner = R * 0.82;
-    ctx.save();
+// Leica 스타일 동심원
+
+ctx.strokeStyle = "#3d3d3d";
+
+for (let i = 0; i < 26; i++) {
+
+    let rr = R - 6 - i * 5;
+
+    if (rr < R * 0.33) break;
+
     ctx.beginPath();
-    ctx.arc(cx, cy, knOuter, 0, Math.PI * 2);
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2, true);
-    ctx.clip("evenodd");
-    var teeth = 130;
-    for (var t = 0; t < teeth; t++) {
-      var ta = (t / teeth) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(ta) * knInner, cy + Math.sin(ta) * knInner);
-      ctx.lineTo(cx + Math.cos(ta) * knOuter, cy + Math.sin(ta) * knOuter);
-      ctx.strokeStyle = t % 2 === 0 ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.4)";
-      ctx.lineWidth = 1.3;
-      ctx.stroke();
-    }
-    ctx.restore();
+
+    ctx.arc(
+        cx,
+        cy,
+        rr,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.lineWidth = 2;
+
+    ctx.stroke();
+
+}
     ctx.beginPath();
     ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
     ctx.strokeStyle = "rgba(255,255,255,0.1)";

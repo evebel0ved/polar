@@ -337,10 +337,8 @@
     ctx.restore();
   }
 
-function drawShutterButton(ctx, x, y, r) {
+  function drawShutterButton(ctx, x, y, r) {
     ctx.save();
-
-    // 바깥 금속 링
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = "#e2e2df";
@@ -349,41 +347,26 @@ function drawShutterButton(ctx, x, y, r) {
     ctx.strokeStyle = "rgba(0,0,0,0.22)";
     ctx.stroke();
 
-    // 안쪽 버튼
     ctx.beginPath();
     ctx.arc(x, y, r * 0.86, 0, Math.PI * 2);
-
-    var grad = ctx.createRadialGradient(
-        x - r * 0.3,
-        y - r * 0.35,
-        r * 0.1,
-        x,
-        y,
-        r * 0.86
-    );
-
+    var grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 0.86);
     grad.addColorStop(0, "#ffffff");
     grad.addColorStop(0.55, "#cfcfcb");
     grad.addColorStop(1, "#a5a5a0");
-
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // 가운데 음영
     ctx.beginPath();
     ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.16)";
     ctx.fill();
 
-    // 하이라이트
     ctx.beginPath();
-    ctx.arc(x, y, r * 0.88, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,.45)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
+    ctx.ellipse(x - r * 0.3, y - r * 0.34, r * 0.28, r * 0.15, -0.6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.fill();
     ctx.restore();
-}
+  }
 
   function drawStatusLED(ctx, x, y, w, h) {
     ctx.save();
@@ -418,21 +401,23 @@ function drawShutterButton(ctx, x, y, r) {
     ctx.fillRect(x, y, w, h);
 
     // diagonal cross-hatched waffle texture
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-ctx.lineWidth = 1;
-
-var gap = w / 10;
-
-for (var i = 1; i < 10; i++) {
-
-    var xx = x + gap * i;
-
-    ctx.beginPath();
-    ctx.moveTo(xx, y + 3);
-    ctx.lineTo(xx, y + h - 3);
-    ctx.stroke();
-
-}
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)";
+    ctx.lineWidth = 1.1;
+    var step = 5.5;
+    for (var i = -h; i < w + h; i += step) {
+      ctx.beginPath();
+      ctx.moveTo(x + i, y);
+      ctx.lineTo(x + i + h, y + h);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.16)";
+    for (var j = -h; j < w + h; j += step) {
+      ctx.beginPath();
+      ctx.moveTo(x + j, y + h);
+      ctx.lineTo(x + j + h, y);
+      ctx.stroke();
+    }
+    ctx.restore();
 
     roundRectPath(ctx, x, y, w, h, h / 2);
     ctx.lineWidth = 1;
@@ -569,52 +554,11 @@ for (var i = 1; i < 10; i++) {
     // fixed metal/plastic tone across every colorway, only going dark on
     // the charcoal body)
     var plateColor = isDark ? shade(body, -4) : "#d8d7d3";
-
-roundRectPath(ctx, bx, by, bw, L.shoulderH, {
-    tl: L.bodyR,
-    tr: L.bodyR,
-    br: 0,
-    bl: 0
-});
-
-var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
-
-plateGrad.addColorStop(0, shade(plateColor, 8));
-plateGrad.addColorStop(1, shade(plateColor, -10));
-
-ctx.fillStyle = plateGrad;
-ctx.fill();
-ctx.save();
-
-roundRectPath(ctx, bx, by, bw, L.shoulderH, {
-    tl: L.bodyR,
-    tr: L.bodyR,
-    br: 0,
-    bl: 0
-});
-
-ctx.clip();
-
-var shine = ctx.createLinearGradient(
-    0,
-    by,
-    0,
-    by + L.shoulderH
-);
-
-shine.addColorStop(0, "rgba(255,255,255,.40)");
-shine.addColorStop(.35, "rgba(255,255,255,.15)");
-shine.addColorStop(1, "rgba(255,255,255,0)");
-
-ctx.fillStyle = shine;
-ctx.fillRect(
-    bx,
-    by,
-    bw,
-    L.shoulderH
-);
-
-ctx.restore();
+    roundRectPath(ctx, bx, by, bw, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
+    var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
+    plateGrad.addColorStop(0, shade(plateColor, 8));
+    plateGrad.addColorStop(1, shade(plateColor, -10));
+    ctx.fillStyle = plateGrad;
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(bx, by + L.shoulderH + 0.5);
@@ -635,7 +579,8 @@ ctx.restore();
     // chrome shutter button
     drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
-   
+    // red vertical status LED
+    drawStatusLED(ctx, bx + bw * 0.771 - bw * 0.009, shY - L.shoulderH * 0.33, bw * 0.018, L.shoulderH * 0.62);
 
     // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);
@@ -664,157 +609,102 @@ ctx.restore();
     ctx.restore();
   }
 
-  function drawLens(ctx, cx, cy, R) {
+ function drawLens(ctx, cx, cy, R) {
     ctx.save();
 
-    // recessed mount collar (depth behind the lens)
-    ctx.beginPath();
-    ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
-    ctx.fillStyle = "#030303";
-    ctx.fill();
-
-    // thin bright chrome trim ring where the lens meets the body
-    ctx.beginPath();
-    ctx.arc(cx, cy, R + 6, 0, Math.PI * 2);
-    var trimGrad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-    trimGrad.addColorStop(0, "#e9e9e6");
-    trimGrad.addColorStop(0.5, "#8b8b86");
-    trimGrad.addColorStop(1, "#3a3a38");
-    ctx.strokeStyle = trimGrad;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // outer bezel
+    // 1. 바깥 검은 링
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    var bezelGrad = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.1, cx, cy, R);
-    bezelGrad.addColorStop(0, "#333230");
-    bezelGrad.addColorStop(1, "#0d0c0b");
-    ctx.fillStyle = bezelGrad;
+    ctx.fillStyle = "#141414";
     ctx.fill();
 
-    // outer knurled ring band (dense fine ridges, like a focus/filter ring)
-// Leica 스타일 동심원
-
-ctx.strokeStyle = "#3d3d3d";
-
-for (let i = 0; i < 26; i++) {
-
-    let rr = R - 6 - i * 5;
-
-    if (rr < R * 0.33) break;
-
+    // 2. 바깥 얇은 테두리
     ctx.beginPath();
+    ctx.arc(cx, cy, R + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = "#4b4b4b";
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
-    ctx.arc(
+    // 3. Leica 스타일 동심원
+    const grooveColor = "#2a2a2a";
+
+    for (let i = 0; i < 48; i++) {
+
+        let rr = R - 4 - i * 2.2;
+
+        if (rr < R * 0.32) break;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.strokeStyle = grooveColor;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+    }
+
+    // 4. 중앙 검은 유리
+    const glassR = R * 0.30;
+
+    const glass = ctx.createRadialGradient(
+        cx - glassR * 0.35,
+        cy - glassR * 0.35,
+        glassR * 0.05,
         cx,
         cy,
-        rr,
+        glassR
+    );
+
+    glass.addColorStop(0, "#33383d");
+    glass.addColorStop(.4, "#17191c");
+    glass.addColorStop(1, "#050505");
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, glassR, 0, Math.PI * 2);
+    ctx.fillStyle = glass;
+    ctx.fill();
+
+    // 5. 가운데 작은 렌즈
+    ctx.beginPath();
+    ctx.arc(cx, cy, glassR * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fill();
+
+    // 6. 가운데 점
+    ctx.beginPath();
+    ctx.arc(cx, cy, glassR * 0.05, 0, Math.PI * 2);
+    ctx.fillStyle = "#5b6065";
+    ctx.fill();
+
+    // 7. 반사광
+    ctx.beginPath();
+    ctx.ellipse(
+        cx - glassR * 0.35,
+        cy - glassR * 0.35,
+        glassR * 0.28,
+        glassR * 0.16,
+        -0.5,
         0,
         Math.PI * 2
     );
 
-    ctx.lineWidth = 2;
+    ctx.fillStyle = "rgba(255,255,255,.18)";
+    ctx.fill();
 
-    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(
+        cx + glassR * 0.20,
+        cy + glassR * 0.26,
+        glassR * 0.10,
+        glassR * 0.05,
+        -0.5,
+        0,
+        Math.PI * 2
+    );
 
+    ctx.fillStyle = "rgba(255,255,255,.06)";
+    ctx.fill();
+
+    ctx.restore();
 }
-    var knInner = R * 0.66;
-    ctx.beginPath();
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // smooth recessed ring (focus collar) between the knurl and the dome
-    var smoothOuter = knInner, smoothInner = R * 0.6;
-    ctx.beginPath();
-    ctx.arc(cx, cy, (smoothOuter + smoothInner) / 2, 0, Math.PI * 2);
-    ctx.lineWidth = smoothOuter - smoothInner;
-    var ringGrad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-    ringGrad.addColorStop(0, "#232220");
-    ringGrad.addColorStop(0.5, "#141312");
-    ringGrad.addColorStop(1, "#050505");
-    ctx.strokeStyle = ringGrad;
-    ctx.stroke();
-
-    // screws around the smooth ring
-    var screwR = (smoothOuter + smoothInner) / 2;
-    [30, 150, 210, 330].forEach(function (deg) {
-      var a = (deg * Math.PI) / 180;
-      var sx = cx + Math.cos(a) * screwR, sy = cy + Math.sin(a) * screwR;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(sx - 2.6, sy);
-      ctx.lineTo(sx + 2.6, sy);
-      ctx.strokeStyle = "rgba(255,255,255,0.2)";
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-    });
-
-    // aperture-blade facets ring, just outside the glass dome
-    var facetR = R * 0.56;
-    var facetCount = 14;
-    for (var f = 0; f < facetCount; f++) {
-      var fa = (f / facetCount) * Math.PI * 2;
-      var fa2 = ((f + 1) / facetCount) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, facetR, fa, fa2);
-      ctx.closePath();
-      ctx.fillStyle = f % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.12)";
-      ctx.fill();
-    }
-
-    // glossy black lens dome
-    var gR = R * 0.54;
-    ctx.beginPath();
-    ctx.arc(cx, cy, gR, 0, Math.PI * 2);
-    var glassGrad = ctx.createRadialGradient(cx, cy, gR * 0.05, cx, cy, gR);
-    glassGrad.addColorStop(0, "#26292c");
-    glassGrad.addColorStop(0.7, "#131516");
-    glassGrad.addColorStop(1, "#040404");
-    ctx.fillStyle = glassGrad;
-    ctx.fill();
-
-    // fine concentric grooves inside the dome
-    for (var gc = 1; gc <= 8; gc++) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, gR * (gc / 9), 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    // small centered pin (lens axis screw)
-    ctx.beginPath();
-    ctx.arc(cx, cy, gR * 0.08, 0, Math.PI * 2);
-    var pinGrad = ctx.createRadialGradient(cx, cy, 1, cx, cy, gR * 0.08);
-    pinGrad.addColorStop(0, "#3d4144");
-    pinGrad.addColorStop(1, "#0a0b0c");
-    ctx.fillStyle = pinGrad;
-    ctx.fill();
-
-    // broad, soft highlight sweep across the upper-left of the whole lens —
-    // the only source of "shine", so the dome reads as flat matte glass
-    // rather than a glossy eye
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.clip();
-    var sweep = ctx.createLinearGradient(cx - R, cy - R, cx + R * 0.2, cy + R * 0.2);
-    sweep.addColorStop(0, "rgba(255,255,255,0.16)");
-    sweep.addColorStop(0.3, "rgba(255,255,255,0.04)");
-    sweep.addColorStop(0.5, "rgba(255,255,255,0)");
-    ctx.fillStyle = sweep;
-    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-    ctx.restore();
-
-    ctx.restore();
-  }
 
   // ---------------------------------------------------------------------
   // Polaroid card (orientation aware)

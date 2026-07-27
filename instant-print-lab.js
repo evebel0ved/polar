@@ -153,8 +153,8 @@
   // of device, so preview and every exported file share one composition)
   // ---------------------------------------------------------------------
   var LAYOUT = {
-    bodyX: 90, bodyY: 210, bodyW: 760, bodyH: 580, bodyR: 30,
-    shoulderH: 150
+    bodyX: 90, bodyY: 190, bodyW: 760, bodyH: 620, bodyR: 34,
+    shoulderH: 132
   };
 
   var CARD_DIMS = {
@@ -227,115 +227,173 @@
   }
 
   // ---------------------------------------------------------------------
-  // Camera — detailed body render
+  // Camera — detailed body render (rounded-body instant camera with a
+  // large center lens, inspired by classic instant-camera proportions —
+  // no brand names or wordmarks are drawn anywhere on the body/lens)
   // ---------------------------------------------------------------------
-  function drawDial(ctx, x, y, r, color, ticks) {
+  function drawToggleKnob(ctx, x, y, r, body, isDark) {
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    var grad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
-    grad.addColorStop(0, shade(color, 26));
-    grad.addColorStop(1, shade(color, -22));
+    var grad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.15, x, y, r);
+    grad.addColorStop(0, "#3a3a3c");
+    grad.addColorStop(0.6, "#1c1c1e");
+    grad.addColorStop(1, "#0a0a0b");
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = shade(body, isDark ? 14 : -18);
+    ctx.stroke();
+
+    // thin metallic rim highlight (top-left arc)
+    ctx.beginPath();
+    ctx.arc(x, y, r - 1.5, Math.PI * 1.05, Math.PI * 1.75);
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // two position-marker dots
+    [-0.62, 0.62].forEach(function (off) {
+      var a = -Math.PI / 2 + off;
+      var dx = x + Math.cos(a) * r * 0.55;
+      var dy = y + Math.sin(a) * r * 0.55;
+      ctx.beginPath();
+      ctx.arc(dx, dy, r * 0.1, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(240,240,238,0.85)";
+      ctx.fill();
+    });
+    // center cap
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawWindow(ctx, x, y, w, h) {
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, 8);
+    var grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, "#4c5054");
+    grad.addColorStop(1, "#1b1c1e");
     ctx.fillStyle = grad;
     ctx.fill();
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.3)";
     ctx.stroke();
-
-    var teeth = ticks || 16;
-    for (var i = 0; i < teeth; i++) {
-      var a = (i / teeth) * Math.PI * 2;
-      var x1 = x + Math.cos(a) * (r - 3), y1 = y + Math.sin(a) * (r - 3);
-      var x2 = x + Math.cos(a) * r, y2 = y + Math.sin(a) * r;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = "rgba(0,0,0,0.2)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    // index mark
-    ctx.beginPath();
-    ctx.arc(x, y - r * 0.5, 2, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    roundRectPath(ctx, x + 5, y + 4, w * 0.42, h * 0.34, 4);
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
     ctx.fill();
     ctx.restore();
   }
 
-  function drawGripTexture(ctx, x, y, w, h, r, body, isDark) {
+  function drawShutterButton(ctx, x, y, r) {
     ctx.save();
-    roundRectPath(ctx, x, y, w, h, r);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#e2e2df";
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.22)";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.86, 0, Math.PI * 2);
+    var grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 0.86);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.55, "#cfcfcb");
+    grad.addColorStop(1, "#a5a5a0");
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.16)";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.3, y - r * 0.34, r * 0.28, r * 0.15, -0.6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawStatusLED(ctx, x, y, w, h) {
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, w / 2);
+    var grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, "#e2685a");
+    grad.addColorStop(0.5, "#b5382a");
+    grad.addColorStop(1, "#7c2018");
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.32, y + h * 0.22, w * 0.28, h * 0.14, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawRidgedSwitch(ctx, x, y, w, h, body, isDark) {
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, h / 2);
     ctx.clip();
-    var base = shade(body, isDark ? -12 : -14);
+    var base = shade(body, isDark ? -18 : -22);
     ctx.fillStyle = base;
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.16)";
-    ctx.lineWidth = 2;
-    var step = 9;
-    for (var i = -h; i < w + h; i += step) {
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.22)";
+    ctx.lineWidth = 1.3;
+    for (var i = x; i < x + w; i += 4) {
       ctx.beginPath();
-      ctx.moveTo(x + i, y + h);
-      ctx.lineTo(x + i + h, y);
+      ctx.moveTo(i, y);
+      ctx.lineTo(i, y + h);
       ctx.stroke();
     }
     ctx.restore();
-    roundRectPath(ctx, x, y, w, h, r);
+    roundRectPath(ctx, x, y, w, h, h / 2);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.18)";
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.22)";
     ctx.stroke();
   }
 
-  function drawStrapLug(ctx, x, y, body, isDark) {
+  function drawTopNub(ctx, x, y, w, h, angle, color) {
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, 11, 0, Math.PI * 2);
-    ctx.fillStyle = shade(body, isDark ? -20 : -24);
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
-    ctx.fillStyle = "#17171a";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x - 1.5, y - 1.5, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawFlash(ctx, x, y, w, h) {
-    ctx.save();
-    roundRectPath(ctx, x, y, w, h, 6);
-    var grad = ctx.createLinearGradient(x, y, x, y + h);
-    grad.addColorStop(0, "#eef1ee");
-    grad.addColorStop(0.5, "#c7cdc8");
-    grad.addColorStop(1, "#9aa39c");
-    ctx.fillStyle = grad;
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    roundRectPath(ctx, -w / 2, -h / 2, w, h, h / 2);
+    ctx.fillStyle = color;
     ctx.fill();
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.28)";
     ctx.stroke();
-    roundRectPath(ctx, x + 4, y + 4, w - 8, h * 0.4, 3);
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
-    ctx.fill();
     ctx.restore();
   }
 
-  function drawLED(ctx, x, y, color) {
+  function drawBodyLightSweep(ctx, L, isDark) {
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, 3.4, 0, Math.PI * 2);
-    var g = ctx.createRadialGradient(x - 1, y - 1, 0.4, x, y, 3.6);
-    g.addColorStop(0, shade(color, 40));
-    g.addColorStop(1, color);
+    roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
+    ctx.clip();
+    ctx.globalCompositeOperation = "soft-light";
+    var g = ctx.createRadialGradient(
+      L.bodyX + L.bodyW * 0.2, L.bodyY + L.bodyH * 0.42, 10,
+      L.bodyX + L.bodyW * 0.2, L.bodyY + L.bodyH * 0.42, L.bodyW * 0.75
+    );
+    g.addColorStop(0, "rgba(255,255,255,0.95)");
+    g.addColorStop(0.35, "rgba(255,255,255,0.5)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g;
-    ctx.fill();
+    ctx.fillRect(L.bodyX, L.bodyY, L.bodyW, L.bodyH);
+
+    ctx.globalCompositeOperation = "source-over";
+    var g2 = ctx.createLinearGradient(L.bodyX, L.bodyY, L.bodyX + L.bodyW * 0.55, L.bodyY + L.bodyH * 0.55);
+    g2.addColorStop(0, isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.40)");
+    g2.addColorStop(0.5, isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.10)");
+    g2.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g2;
+    ctx.fillRect(L.bodyX, L.bodyY, L.bodyW, L.bodyH);
     ctx.restore();
   }
 
@@ -365,6 +423,10 @@
     ctx.strokeStyle = shade(body, isDark ? 14 : -14);
     ctx.stroke();
 
+    // top nubs — small switch/lever shapes peeking above the top edge
+    drawTopNub(ctx, L.bodyX + 46, L.bodyY + 2, 30, 13, -0.05, shade(body, isDark ? 10 : -6));
+    drawTopNub(ctx, L.bodyX + L.bodyW - 44, L.bodyY + 1, 26, 12, -0.5, "#1c1c1e");
+
     // shoulder band (top)
     roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
     ctx.fillStyle = shade(body, isDark ? -6 : -8);
@@ -376,117 +438,40 @@
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // strap lugs (top corners)
-    drawStrapLug(ctx, L.bodyX + 22, L.bodyY + 22, body, isDark);
-    drawStrapLug(ctx, L.bodyX + L.bodyW - 22, L.bodyY + 22, body, isDark);
+    // grey sensor / viewfinder window (center-left of shoulder)
+    var winW = 78, winH = 46, winX = L.bodyX + L.bodyW * 0.42, winY = L.bodyY + (L.shoulderH - winH) / 2;
+    drawWindow(ctx, winX, winY, winW, winH);
 
-    // hot shoe (top center)
-    var hsW = 54, hsH = 16, hsX = L.bodyX + L.bodyW / 2 - hsW / 2, hsY = L.bodyY - 9;
-    roundRectPath(ctx, hsX, hsY, hsW, hsH, 3);
-    ctx.fillStyle = "#232326";
-    ctx.fill();
-    roundRectPath(ctx, hsX + 5, hsY + 3, hsW - 10, hsH - 10, 1.5);
-    ctx.fillStyle = "#0e0e10";
-    ctx.fill();
+    // chrome shutter button
+    var shX = winX + winW + 66, shY = L.bodyY + L.shoulderH / 2;
+    drawShutterButton(ctx, shX, shY, 34);
 
-    // viewfinder window
-    var vfX = L.bodyX + 66, vfY = L.bodyY + 46, vfW = 150, vfH = 58;
-    roundRectPath(ctx, vfX, vfY, vfW, vfH, 10);
-    var vfGrad = ctx.createLinearGradient(vfX, vfY, vfX, vfY + vfH);
-    vfGrad.addColorStop(0, "#3b3d40");
-    vfGrad.addColorStop(1, "#151517");
-    ctx.fillStyle = vfGrad;
-    ctx.fill();
-    roundRectPath(ctx, vfX + 8, vfY + 7, vfW * 0.4, vfH * 0.32, 6);
-    ctx.fillStyle = "rgba(255,255,255,0.14)";
-    ctx.fill();
-    // viewfinder eyepiece (small square below window)
-    roundRectPath(ctx, vfX + 14, vfY + vfH - 4, 26, 14, 3);
-    ctx.fillStyle = "#101012";
-    ctx.fill();
+    // red vertical status LED
+    drawStatusLED(ctx, shX + 58, shY - 22, 13, 44);
 
-    // status LED near viewfinder
-    drawLED(ctx, vfX + vfW + 30, vfY + 14, "#c65b4a");
+    // ridged mode switch (far right of shoulder)
+    drawRidgedSwitch(ctx, L.bodyX + L.bodyW - 96, shY - 20, 66, 40, body, isDark);
 
-    // small indicator dot
-    ctx.beginPath();
-    ctx.arc(vfX + vfW + 34, vfY + vfH / 2 + 12, 7, 0, Math.PI * 2);
-    ctx.fillStyle = shade(body, isDark ? 20 : -22);
-    ctx.fill();
-
-    // brand plate (blank embossed plate, no logo)
-    var plX = L.bodyX + 66, plY = L.bodyY + L.shoulderH + 34, plW = 190, plH = 30;
-    roundRectPath(ctx, plX, plY, plW, plH, 4);
-    ctx.fillStyle = shade(body, isDark ? -4 : -5);
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = shade(body, isDark ? 10 : -16);
-    ctx.stroke();
-    roundRectPath(ctx, plX + 2, plY + 2, plW - 4, plH * 0.4, 3);
-    ctx.fillStyle = shade(body, isDark ? 8 : 20);
-    ctx.globalAlpha = 0.35;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // textured grip strip (lower-left front, rubberized ridge pattern)
-    drawGripTexture(ctx, L.bodyX + 40, L.bodyY + L.bodyH - 150, 150, 108, 8, body, isDark);
-
-    // flash unit
-    drawFlash(ctx, L.bodyX + 60, L.bodyY + L.shoulderH + 78, 92, 46);
-
-    // shutter button (with chrome ring)
-    var shX = L.bodyX + L.bodyW - 96, shY = L.bodyY + 70;
-    ctx.beginPath();
-    ctx.arc(shX, shY, 34, 0, Math.PI * 2);
-    ctx.fillStyle = "#d8d8d4";
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(shX, shY, 30, 0, Math.PI * 2);
-    var shGrad = ctx.createRadialGradient(shX - 8, shY - 10, 4, shX, shY, 30);
-    shGrad.addColorStop(0, shade(body, isDark ? 24 : 30));
-    shGrad.addColorStop(1, shade(body, isDark ? -18 : -20));
-    ctx.fillStyle = shGrad;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = shade(body, isDark ? 10 : -30);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(shX, shY, 11, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.18)";
-    ctx.fill();
-
-    // mode dial (top right) — larger, with tick marks
-    drawDial(ctx, L.bodyX + L.bodyW - 40, L.bodyY + 26, 20, shade(body, isDark ? -8 : -12), 18);
-
-    // bottom-left small dial
-    drawDial(ctx, L.bodyX + 60, L.bodyY + L.bodyH - 46, 22, shade(body, isDark ? -10 : -16), 20);
-
-    // film-door seam + latch (right edge)
-    ctx.beginPath();
-    ctx.moveTo(L.bodyX + L.bodyW - 26, L.bodyY + L.shoulderH + 12);
-    ctx.lineTo(L.bodyX + L.bodyW - 26, L.bodyY + L.bodyH - 14);
-    ctx.strokeStyle = shade(body, isDark ? 12 : -20);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    roundRectPath(ctx, L.bodyX + L.bodyW - 40, L.bodyY + L.bodyH - 40, 22, 12, 3);
-    ctx.fillStyle = shade(body, isDark ? -16 : -24);
-    ctx.fill();
-
-    // bottom rubber feet
-    [L.bodyX + 34, L.bodyX + L.bodyW - 34].forEach(function (fx) {
-      roundRectPath(ctx, fx - 16, L.bodyY + L.bodyH - 6, 32, 10, 4);
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fill();
-    });
+    // bottom-left toggle knob, tucked at the base of the shoulder/lens area
+    var c = cameraCenter();
+    drawToggleKnob(ctx, L.bodyX + 78, L.bodyY + L.bodyH - 66, 46, body, isDark);
 
     // lens assembly
-    var c = cameraCenter();
-    drawLens(ctx, c.cx, c.cy, 232);
+    drawLens(ctx, c.cx, c.cy, 240);
+
+    // soft diagonal light sweep across the body for a glossier, 3D feel
+    drawBodyLightSweep(ctx, L, isDark);
+
+    // subtle bottom inner shadow (ground the body, add depth)
+    ctx.save();
+    roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
+    ctx.clip();
+    var bs = ctx.createLinearGradient(0, L.bodyY + L.bodyH - 60, 0, L.bodyY + L.bodyH);
+    bs.addColorStop(0, "rgba(0,0,0,0)");
+    bs.addColorStop(1, isDark ? "rgba(0,0,0,0.28)" : "rgba(20,16,10,0.14)");
+    ctx.fillStyle = bs;
+    ctx.fillRect(L.bodyX, L.bodyY + L.bodyH - 60, L.bodyW, 60);
+    ctx.restore();
 
     ctx.restore();
   }
@@ -494,9 +479,9 @@
   function drawLens(ctx, cx, cy, R) {
     ctx.save();
 
-    // mount collar (slightly larger than bezel, gives depth)
+    // recessed mount collar (depth behind the lens)
     ctx.beginPath();
-    ctx.arc(cx, cy, R + 8, 0, Math.PI * 2);
+    ctx.arc(cx, cy, R + 10, 0, Math.PI * 2);
     ctx.fillStyle = "#050505";
     ctx.fill();
 
@@ -504,76 +489,67 @@
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     var bezelGrad = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.1, cx, cy, R);
-    bezelGrad.addColorStop(0, "#302f2c");
-    bezelGrad.addColorStop(1, "#0f0e0d");
+    bezelGrad.addColorStop(0, "#333230");
+    bezelGrad.addColorStop(1, "#0d0c0b");
     ctx.fillStyle = bezelGrad;
     ctx.fill();
 
-    // focus-scale ticks around outer rim
-    var tickCount = 48;
-    for (var t = 0; t < tickCount; t++) {
-      var ta = (t / tickCount) * Math.PI * 2;
-      var long = t % 4 === 0;
-      var r1 = R - (long ? 14 : 8);
-      var r2 = R - 2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(ta) * r1, cy + Math.sin(ta) * r1);
-      ctx.lineTo(cx + Math.cos(ta) * r2, cy + Math.sin(ta) * r2);
-      ctx.strokeStyle = long ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.06)";
-      ctx.lineWidth = long ? 1.3 : 1;
-      ctx.stroke();
-    }
-
-    // ridged rings
-    var ringCount = 7;
-    for (var i = 0; i < ringCount; i++) {
-      var rr = R * (0.42 + (i / ringCount) * 0.42);
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = i % 2 === 0 ? "rgba(255,255,255,0.055)" : "rgba(0,0,0,0.32)";
-      ctx.stroke();
-    }
-
-    // knurled grip ring (fine vertical ridges) between R*0.62–0.74
-    var innerR = R * 0.62, outerR = R * 0.76;
+    // outer knurled ring band (dense fine ridges, like a focus/filter ring)
+    var knOuter = R, knInner = R * 0.82;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-    ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+    ctx.arc(cx, cy, knOuter, 0, Math.PI * 2);
+    ctx.arc(cx, cy, knInner, 0, Math.PI * 2, true);
     ctx.clip("evenodd");
-    var knurlTeeth = 64;
-    for (var k = 0; k < knurlTeeth; k++) {
-      var ka = (k / knurlTeeth) * Math.PI * 2;
+    var teeth = 96;
+    for (var t = 0; t < teeth; t++) {
+      var ta = (t / teeth) * Math.PI * 2;
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(ka) * innerR, cy + Math.sin(ka) * innerR);
-      ctx.lineTo(cx + Math.cos(ka) * outerR, cy + Math.sin(ka) * outerR);
-      ctx.strokeStyle = k % 2 === 0 ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.30)";
-      ctx.lineWidth = 1.4;
+      ctx.moveTo(cx + Math.cos(ta) * knInner, cy + Math.sin(ta) * knInner);
+      ctx.lineTo(cx + Math.cos(ta) * knOuter, cy + Math.sin(ta) * knOuter);
+      ctx.strokeStyle = t % 2 === 0 ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 1.6;
       ctx.stroke();
     }
     ctx.restore();
+    ctx.beginPath();
+    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    // screws
-    var screwR = R * 0.92;
-    [45, 135, 225, 315].forEach(function (deg) {
+    // smooth recessed ring (focus collar) between the knurl and the dome
+    var smoothOuter = knInner, smoothInner = R * 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, (smoothOuter + smoothInner) / 2, 0, Math.PI * 2);
+    ctx.lineWidth = smoothOuter - smoothInner;
+    var ringGrad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+    ringGrad.addColorStop(0, "#232220");
+    ringGrad.addColorStop(0.5, "#141312");
+    ringGrad.addColorStop(1, "#050505");
+    ctx.strokeStyle = ringGrad;
+    ctx.stroke();
+
+    // screws around the smooth ring
+    var screwR = (smoothOuter + smoothInner) / 2;
+    [30, 150, 210, 330].forEach(function (deg) {
       var a = (deg * Math.PI) / 180;
       var sx = cx + Math.cos(a) * screwR, sy = cy + Math.sin(a) * screwR;
       ctx.beginPath();
-      ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(sx - 3, sy);
-      ctx.lineTo(sx + 3, sy);
-      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.moveTo(sx - 2.6, sy);
+      ctx.lineTo(sx + 2.6, sy);
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
       ctx.lineWidth = 0.8;
       ctx.stroke();
     });
 
-    // aperture-blade facets ring, just outside the glass
-    var facetR = R * 0.54;
-    var facetCount = 9;
+    // aperture-blade facets ring, just outside the glass dome
+    var facetR = R * 0.56;
+    var facetCount = 10;
     for (var f = 0; f < facetCount; f++) {
       var fa = (f / facetCount) * Math.PI * 2;
       var fa2 = ((f + 1) / facetCount) * Math.PI * 2;
@@ -581,38 +557,60 @@
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, facetR, fa, fa2);
       ctx.closePath();
-      ctx.fillStyle = f % 2 === 0 ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.10)";
+      ctx.fillStyle = f % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.12)";
       ctx.fill();
     }
 
-    // inner glass
-    var gR = R * 0.5;
+    // glossy black lens dome
+    var gR = R * 0.54;
     ctx.beginPath();
     ctx.arc(cx, cy, gR, 0, Math.PI * 2);
     var glassGrad = ctx.createRadialGradient(cx - gR * 0.3, cy - gR * 0.35, gR * 0.05, cx, cy, gR);
-    glassGrad.addColorStop(0, "#3a4750");
-    glassGrad.addColorStop(0.55, "#14181b");
-    glassGrad.addColorStop(1, "#050506");
+    glassGrad.addColorStop(0, "#333a3f");
+    glassGrad.addColorStop(0.5, "#121517");
+    glassGrad.addColorStop(1, "#020202");
     ctx.fillStyle = glassGrad;
     ctx.fill();
 
-    // concentric glass coating rings
-    for (var gcr = 0; gcr < 3; gcr++) {
+    // fine concentric grooves inside the dome
+    for (var gc = 1; gc <= 5; gc++) {
       ctx.beginPath();
-      ctx.arc(cx, cy, gR * (0.55 + gcr * 0.15), 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(120,170,190,0.12)";
+      ctx.arc(cx, cy, gR * (gc / 6), 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
       ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // specular highlight
+    // center pin, offset slightly like a real lens axis screw
     ctx.beginPath();
-    ctx.ellipse(cx - gR * 0.32, cy - gR * 0.35, gR * 0.22, gR * 0.12, -0.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.20)";
+    ctx.arc(cx - gR * 0.06, cy + gR * 0.08, gR * 0.09, 0, Math.PI * 2);
+    var pinGrad = ctx.createRadialGradient(cx - gR * 0.1, cy + gR * 0.04, 1, cx - gR * 0.06, cy + gR * 0.08, gR * 0.09);
+    pinGrad.addColorStop(0, "#4a4f52");
+    pinGrad.addColorStop(1, "#0a0b0c");
+    ctx.fillStyle = pinGrad;
+    ctx.fill();
+
+    // broad photographic highlight sweep across the upper-left of the lens
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.clip();
+    var sweep = ctx.createLinearGradient(cx - R, cy - R, cx + R * 0.2, cy + R * 0.2);
+    sweep.addColorStop(0, "rgba(255,255,255,0.22)");
+    sweep.addColorStop(0.35, "rgba(255,255,255,0.05)");
+    sweep.addColorStop(0.5, "rgba(255,255,255,0)");
+    ctx.fillStyle = sweep;
+    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    ctx.restore();
+
+    // crisp specular highlights on the glass dome
+    ctx.beginPath();
+    ctx.ellipse(cx - gR * 0.32, cy - gR * 0.36, gR * 0.24, gR * 0.13, -0.5, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + gR * 0.28, cy + gR * 0.42, gR * 0.1, gR * 0.05, -0.4, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.ellipse(cx + gR * 0.3, cy + gR * 0.4, gR * 0.11, gR * 0.05, -0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fill();
 
     ctx.restore();

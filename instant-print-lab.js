@@ -208,14 +208,13 @@
     return lerp(startX, endX, e);
   }
 
-  // vertical orientation: card ejects straight down — starting mostly
-  // tucked under the camera body and sliding down to a resting position
-  // just below it (small gap, so it reads as printing from inside the
-  // camera rather than floating separately beneath it)
+  // vertical orientation: card ejects straight down — starts fully behind
+  // the camera body (never above its top edge) and slides down to rest
+  // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
-    var startY = bodyBottom - cardH + 56;
-    var endY = bodyBottom + 28;
+    var startY = Math.max(bodyBottom - cardH + 56, L.bodyY);
+    var endY = bodyBottom;
     return lerp(startY, endY, e);
   }
 
@@ -242,16 +241,56 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Some mobile browsers (notably several mobile WebViews / older Safari)
+  // silently ignore ctx.filter — no exception is thrown, it just no-ops —
+  // so the try/catch below never caught it and the background rendered
+  // unblurred. This checks support for real by round-tripping the value.
+  var _canvasFilterSupport = null;
+  function supportsCanvasFilter() {
+    if (_canvasFilterSupport !== null) return _canvasFilterSupport;
+    try {
+      var probe = document.createElement("canvas").getContext("2d");
+      probe.filter = "blur(2px)";
+      _canvasFilterSupport = probe.filter === "blur(2px)";
+    } catch (e) {
+      _canvasFilterSupport = false;
+    }
+    return _canvasFilterSupport;
+  }
+
+  // Manual blur fallback for browsers without ctx.filter support: drawing
+  // the source image far smaller and letting the browser's own bitmap
+  // smoothing scale it back up approximates a soft gaussian blur without
+  // depending on the filter API at all, so it works everywhere.
+  function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
+    var factor = clamp(blurRadius / 3, 6, 60);
+    var smallW = Math.max(6, Math.round(destW / factor));
+    var smallH = Math.max(6, Math.round(destH / factor));
+    var small = document.createElement("canvas");
+    small.width = smallW; small.height = smallH;
+    var sctx = small.getContext("2d");
+    sctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, smallW, smallH);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(small, 0, 0, smallW, smallH, destX, destY, destW, destH);
+    ctx.restore();
+  }
+
   function drawBlurredPhotoBackground(ctx, photoImg) {
     var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, W, H);
-    var pad = 160;
+    var pad = 80;
+    var blurRadius = 42;
     ctx.save();
-    try {
-      ctx.filter = "blur(90px) saturate(1.08) brightness(0.94)";
-      ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
-    } catch (err) {
-      // filter unsupported — fall back to a plain (unblurred) cover fill
-      ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, W, H);
+    if (supportsCanvasFilter()) {
+      try {
+        ctx.filter = "blur(" + blurRadius + "px) saturate(1.06) brightness(0.94)";
+        ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
+      } catch (err) {
+        drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
+      }
+    } else {
+      drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
     }
     ctx.restore();
 
@@ -672,18 +711,21 @@
     drawToggleKnob(ctx, bx + bw * 0.11, by + bh * 0.84, bw * 0.054, body, isDark);
 
     // 바디 하이라이트 (상단에 위치 — 빛이 위에서 들어오는 느낌)
-    // clipped to the rounded body path so the fill can't poke out past the
-    // rounded top-left corner (that was the stray triangle sticking out)
+    // uses a radial gradient (opaque near the top-left corner, fading to
+    // fully transparent) instead of a flat-alpha shape, so it blends
+    // softly into the body instead of ending on a hard edge; clipped to
+    // the rounded body path so it can't poke out past the corner.
     ctx.save();
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
     ctx.clip();
-    ctx.beginPath();
-    ctx.moveTo(bx + 2, by + bh * 0.65);
-    ctx.lineTo(bx + bw * 0.45, by + 2);
-    ctx.lineTo(bx + 2, by + 2);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.25)"; 
-    ctx.fill();
+    var hgCx = bx + bw * 0.06, hgCy = by + bh * 0.06;
+    var hg = ctx.createRadialGradient(hgCx, hgCy, 0, hgCx, hgCy, bw * 0.6);
+    hg.addColorStop(0, "rgba(255,255,255,0.32)");
+    hg.addColorStop(0.35, "rgba(255,255,255,0.16)");
+    hg.addColorStop(0.7, "rgba(255,255,255,0.05)");
+    hg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = hg;
+    ctx.fillRect(bx, by, bw, bh);
     ctx.restore();
     
     // lens assembly

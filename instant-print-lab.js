@@ -153,13 +153,15 @@
   // of device, so preview and every exported file share one composition)
   // ---------------------------------------------------------------------
   var LAYOUT = {
-    bodyX: 150, bodyY: 236, bodyW: 630, bodyH: 512, bodyR: 30,
-    shoulderH: 112
+    bodyX: 140, bodyY: 250, bodyW: 620, bodyH: 424, bodyR: 36,
+    shoulderH: 94
   };
 
   var CARD_DIMS = {
-    vertical:   { w: 494, h: 588, side: "bottom", margin: 112 },
-    horizontal: { w: 634, h: 470, side: "right",  margin: 132 }
+    vertical:   { w: 480, h: 580, side: "bottom", margin: 108 },
+    // horizontal card is height-capped so it never extends past the
+    // camera body's top/bottom edges (see cameraCenter() below)
+    horizontal: { w: 430, h: 300, side: "right",  margin: 92 }
   };
 
   function cameraCenter() {
@@ -505,11 +507,32 @@
     ctx.restore();
   }
 
+  function drawLogoDot(ctx, x, y, r) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
+    g.addColorStop(0, "#e34432");
+    g.addColorStop(0.55, "#c1281c");
+    g.addColorStop(1, "#8c1912");
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = r * 0.09;
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.28, y - r * 0.32, r * 0.32, r * 0.16, -0.6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fill();
+    ctx.restore();
+  }
+
   function drawCamera(ctx, colorDef) {
     var L = LAYOUT;
     var body = colorDef.body;
     var isDark = isDarkColor(body);
-    var k = L.bodyW / 630; // proportional scale for hardware sizing
+    var bw = L.bodyW, bh = L.bodyH, bx = L.bodyX, by = L.bodyY;
+    var k = bw / 620; // proportional scale for hardware sizing
 
     ctx.save();
     ctx.shadowColor = "rgba(20,16,12,0.28)";
@@ -517,8 +540,8 @@
     ctx.shadowOffsetY = 18 * k;
 
     // body
-    roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
-    var bodyGrad = ctx.createLinearGradient(0, L.bodyY, 0, L.bodyY + L.bodyH);
+    roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
+    var bodyGrad = ctx.createLinearGradient(0, by, 0, by + bh);
     bodyGrad.addColorStop(0, shade(body, isDark ? 6 : 10));
     bodyGrad.addColorStop(0.4, body);
     bodyGrad.addColorStop(1, shade(body, isDark ? -10 : -6));
@@ -527,48 +550,59 @@
     ctx.restore();
 
     // body edge line
-    roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
+    roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
     ctx.lineWidth = 2;
     ctx.strokeStyle = shade(body, isDark ? 14 : -14);
     ctx.stroke();
 
-    // top hardware — small strap lug (left) and geared advance dial with
-    // strap lug (right), both peeking just above the top edge
-    drawTopNub(ctx, L.bodyX + 34 * k, L.bodyY + 3 * k, 24 * k, 11 * k, -0.05, shade(body, isDark ? 10 : -6));
-    drawTopNub(ctx, L.bodyX + L.bodyW - 40 * k, L.bodyY - 2 * k, 20 * k, 20 * k, 0, shade(body, isDark ? 10 : -6));
-    drawGearedTopDial(ctx, L.bodyX + L.bodyW - 40 * k, L.bodyY + 4 * k, 17 * k, isDark);
+    // faint top hardware — strap lug (left) and geared advance dial with
+    // strap lug (right), both low-contrast like the reference photo
+    drawTopNub(ctx, bx + bw * 0.22, by - 1 * k, 22 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
+    drawTopNub(ctx, bx + bw * 0.70, by - 2 * k, 18 * k, 18 * k, 0, shade(body, isDark ? 8 : -5));
+    drawGearedTopDial(ctx, bx + bw * 0.70, by + 3 * k, 15 * k, isDark);
 
-    // shoulder band (top)
-    roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
-    ctx.fillStyle = shade(body, isDark ? -5 : -7);
+    // shoulder plate — a neutral silver-grey top panel, independent of the
+    // body shell color (matches the reference: the top plate reads as a
+    // fixed metal/plastic tone across every colorway, only going dark on
+    // the charcoal body)
+    var plateColor = isDark ? shade(body, -4) : "#d8d7d3";
+    roundRectPath(ctx, bx, by, bw, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
+    var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
+    plateGrad.addColorStop(0, shade(plateColor, 8));
+    plateGrad.addColorStop(1, shade(plateColor, -10));
+    ctx.fillStyle = plateGrad;
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(L.bodyX, L.bodyY + L.shoulderH + 0.5);
-    ctx.lineTo(L.bodyX + L.bodyW, L.bodyY + L.shoulderH + 0.5);
-    ctx.strokeStyle = shade(body, isDark ? 10 : -18);
+    ctx.moveTo(bx, by + L.shoulderH + 0.5);
+    ctx.lineTo(bx + bw, by + L.shoulderH + 0.5);
+    ctx.strokeStyle = shade(plateColor, -30);
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // grey sensor / viewfinder window (center-left of shoulder)
-    var winW = 66 * k, winH = 39 * k, winX = L.bodyX + L.bodyW * 0.40, winY = L.bodyY + (L.shoulderH - winH) / 2;
-    drawWindow(ctx, winX, winY, winW, winH);
+    var shY = by + L.shoulderH * 0.56;
+
+    // red logo dot (no lettering)
+    drawLogoDot(ctx, bx + bw * 0.354, shY, bw * 0.038);
+
+    // grey sensor / viewfinder window
+    var winW = bw * 0.08, winH = winW * 0.62;
+    drawWindow(ctx, bx + bw * 0.506 - winW / 2, shY - winH / 2, winW, winH);
 
     // chrome shutter button
-    var shX = winX + winW + 58 * k, shY = L.bodyY + L.shoulderH / 2;
-    drawShutterButton(ctx, shX, shY, 29 * k);
+    drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
     // red vertical status LED
-    drawStatusLED(ctx, shX + 50 * k, shY - 19 * k, 11 * k, 37 * k);
+    drawStatusLED(ctx, bx + bw * 0.771 - bw * 0.009, shY - L.shoulderH * 0.33, bw * 0.018, L.shoulderH * 0.62);
 
-    // ridged mode switch (far right of shoulder)
-    drawRidgedSwitch(ctx, L.bodyX + L.bodyW - 84 * k, shY - 17 * k, 56 * k, 34 * k, body, isDark);
+    // pill-shaped waffle switch (far right of shoulder)
+    drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);
 
-    // bottom-left toggle knob, tucked at the base of the shoulder/lens area
+    // bottom-left toggle knob
     var c = cameraCenter();
-    drawToggleKnob(ctx, L.bodyX + 66 * k, L.bodyY + L.bodyH - 56 * k, 39 * k, body, isDark);
+    drawToggleKnob(ctx, bx + bw * 0.171, by + bh * 0.79, bw * 0.054, body, isDark);
 
     // lens assembly
-    drawLens(ctx, c.cx, c.cy, 200 * k);
+    drawLens(ctx, c.cx, c.cy, bw * 0.237);
 
     // soft diagonal light sweep across the body for a glossier, 3D feel
     drawBodyLightSweep(ctx, L, isDark);

@@ -642,10 +642,10 @@
 // Leica 스타일 동심원
 
 ctx.strokeStyle = "#3d3d3d";
+var knInner = R * 0.72;
+for (let i = 0; i < 18; i++) {
 
-for (let i = 0; i < 26; i++) {
-
-    let rr = R - 6 - i * 5;
+    let rr = R - 8 - i * 6;
 
     if (rr < R * 0.33) break;
 

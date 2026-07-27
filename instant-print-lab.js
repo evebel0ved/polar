@@ -162,13 +162,14 @@
   };
 
   // vertical (portrait) layout — camera sits centered near the TOP of the
-  // frame, scaled down proportionally (same 620:424 body ratio, so every
-  // hardware element positioned/sized off bw/bh/k inside drawCamera scales
-  // automatically), leaving room below for the card to eject straight down.
-  var VERTICAL_SCALE = 430 / 620;
+  // frame, enlarged (same 620:424 body ratio, so every hardware element
+  // positioned/sized off bw/bh/k inside drawCamera scales automatically),
+  // leaving just enough room below for the card to eject straight down
+  // without spilling past the canvas edge.
+  var VERTICAL_SCALE = 580 / 620;
   var LAYOUT_VERTICAL = {
     bodyX: (W - 620 * VERTICAL_SCALE) / 2,
-    bodyY: 64,
+    bodyY: 46,
     bodyW: 620 * VERTICAL_SCALE,
     bodyH: 424 * VERTICAL_SCALE,
     bodyR: 36 * VERTICAL_SCALE,
@@ -180,7 +181,10 @@
   }
 
   var CARD_DIMS = {
-    vertical:   { w: 480, h: 580, side: "bottom", margin: 108 },
+    // vertical card is narrower than the (now bigger) camera body so the
+    // ejected photo stays visually contained within the camera's footprint
+    // instead of poking out past its left/right edges
+    vertical:   { w: 420, h: 500, side: "bottom", margin: 92 },
     // horizontal card is height-capped so it never extends past the
     // camera body's top/bottom edges (see cameraCenter() below) —
     // enlarged as far as that cap allows (max ~330 at this bodyH/shoulderH)
@@ -205,11 +209,13 @@
   }
 
   // vertical orientation: card ejects straight down — starting mostly
-  // tucked under the camera body and sliding down to rest below it
+  // tucked under the camera body and sliding down to a resting position
+  // just below it (small gap, so it reads as printing from inside the
+  // camera rather than floating separately beneath it)
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
     var startY = bodyBottom - cardH + 56;
-    var endY = bodyBottom + 44;
+    var endY = bodyBottom + 28;
     return lerp(startY, endY, e);
   }
 
@@ -666,7 +672,11 @@
     drawToggleKnob(ctx, bx + bw * 0.11, by + bh * 0.84, bw * 0.054, body, isDark);
 
     // 바디 하이라이트 (상단에 위치 — 빛이 위에서 들어오는 느낌)
+    // clipped to the rounded body path so the fill can't poke out past the
+    // rounded top-left corner (that was the stray triangle sticking out)
     ctx.save();
+    roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
+    ctx.clip();
     ctx.beginPath();
     ctx.moveTo(bx + 2, by + bh * 0.65);
     ctx.lineTo(bx + bw * 0.45, by + 2);
@@ -1140,50 +1150,47 @@ ctx.fill();
     };
   }
 
-  function imageDataToIndices(data, w, h, nearestIndexFn) {
+  // 8x8 Bayer matrix (0..63), used for ordered dithering
+  var BAYER8 = [
+    0, 32, 8, 40, 2, 34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44, 4, 36, 14, 46, 6, 38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+    3, 35, 11, 43, 1, 33, 9, 41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47, 7, 39, 13, 45, 5, 37,
+    63, 31, 55, 23, 61, 29, 53, 21
+  ];
+
+  // Ordered (Bayer) dithering: nudges each pixel by a small, fixed amount
+  // that only depends on its (x, y) position — not on neighboring pixels
+  // or prior frames. That fixed pattern is what makes it work well for
+  // *animated* GIFs: it still breaks up hard 256-color bands on this app's
+  // smooth gradients, but (unlike error-diffusion dithering) the pattern
+  // stays put from frame to frame instead of shifting/shimmering, which is
+  // what made the animation look noisy/broken rather than smoother.
+  function imageDataToIndicesOrderedDither(data, w, h, nearestIndexFn, strength) {
+    strength = strength || 20;
     var out = new Uint8Array(w * h);
-    for (var i = 0, p = 0; i < data.length; i += 4, p++) {
-      out[p] = nearestIndexFn(data[i], data[i + 1], data[i + 2]);
+    for (var y = 0; y < h; y++) {
+      var rowOff = y * w;
+      var by8 = (y & 7) * 8;
+      for (var x = 0; x < w; x++) {
+        var di = (rowOff + x) * 4;
+        var offset = (BAYER8[by8 + (x & 7)] / 63 - 0.5) * strength;
+        var r = clamp(data[di] + offset, 0, 255);
+        var g = clamp(data[di + 1] + offset, 0, 255);
+        var b = clamp(data[di + 2] + offset, 0, 255);
+        out[rowOff + x] = nearestIndexFn(Math.round(r), Math.round(g), Math.round(b));
+      }
     }
     return out;
   }
 
-  // Floyd–Steinberg dithering: diffuses each pixel's quantization error to
-  // its neighbors, which turns hard color bands (very visible on this app's
-  // smooth gradient backgrounds) into fine, unnoticeable noise instead —
-  // the single biggest lever for perceived GIF quality with a 256-color
-  // palette.
-  function imageDataToIndicesDithered(data, w, h, palette, nearestIndexFn) {
+  function imageDataToIndices(data, w, h, nearestIndexFn) {
     var out = new Uint8Array(w * h);
-    var buf = new Float32Array(w * h * 3);
-    for (var i = 0, j = 0; i < data.length; i += 4, j += 3) {
-      buf[j] = data[i]; buf[j + 1] = data[i + 1]; buf[j + 2] = data[i + 2];
-    }
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        var p = (y * w + x) * 3;
-        var r = clamp(buf[p], 0, 255), g = clamp(buf[p + 1], 0, 255), b = clamp(buf[p + 2], 0, 255);
-        var pi = nearestIndexFn(Math.round(r), Math.round(g), Math.round(b));
-        out[y * w + x] = pi;
-        var pc = palette[pi];
-        var er = r - pc[0], eg = g - pc[1], eb = b - pc[2];
-        if (x + 1 < w) {
-          var p1 = p + 3;
-          buf[p1] += er * (7 / 16); buf[p1 + 1] += eg * (7 / 16); buf[p1 + 2] += eb * (7 / 16);
-        }
-        if (y + 1 < h) {
-          if (x > 0) {
-            var p2 = p + w * 3 - 3;
-            buf[p2] += er * (3 / 16); buf[p2 + 1] += eg * (3 / 16); buf[p2 + 2] += eb * (3 / 16);
-          }
-          var p3 = p + w * 3;
-          buf[p3] += er * (5 / 16); buf[p3 + 1] += eg * (5 / 16); buf[p3 + 2] += eb * (5 / 16);
-          if (x + 1 < w) {
-            var p4 = p + w * 3 + 3;
-            buf[p4] += er * (1 / 16); buf[p4 + 1] += eg * (1 / 16); buf[p4 + 2] += eb * (1 / 16);
-          }
-        }
-      }
+    for (var i = 0, p = 0; i < data.length; i += 4, p++) {
+      out[p] = nearestIndexFn(data[i], data[i + 1], data[i + 2]);
     }
     return out;
   }
@@ -1442,10 +1449,11 @@ ctx.fill();
             setTimeout(function () {
               try {
                 var frames = rawFrames.map(function (imgData) {
-                  // Floyd–Steinberg dithering smooths the gradient backgrounds
-                  // out instead of showing hard 256-color bands
+                  // ordered (Bayer) dithering: smooths gradient banding
+                  // without the frame-to-frame shimmer error-diffusion
+                  // dithering caused on this animation
                   return {
-                    indices: imageDataToIndicesDithered(imgData.data, gw, gh, palette, nearest),
+                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 20),
                     delay: perFrameMs
                   };
                 });

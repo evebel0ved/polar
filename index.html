@@ -3,120 +3,106 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Polaroid Camera Photo Maker</title>
+  <title>Instant Polaroid Maker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <div class="app">
-    <main class="preview-wrap">
-      <div class="preview-head">
-        <div>
-          <h1>POLAROID MAKER</h1>
-          <p>사진을 찍어 폴라로이드 카드를 만들어보세요</p>
-        </div>
-        <div class="preview-actions top-actions">
-          <button id="downloadPngTop" type="button">PNG 저장</button>
-          <button id="downloadGifTop" type="button" class="primary">GIF 저장</button>
-        </div>
-      </div>
+  <div class="container">
+    <header class="header">
+      <h1 class="logo">Instant Polaroid</h1>
+      <p class="subtitle">카메라로 순간을 담아보세요</p>
+    </header>
 
-      <section class="canvas-card" aria-label="폴라로이드 미리보기">
-        <canvas id="polaroidCanvas" width="1280" height="1600"></canvas>
+    <main class="main-content">
+      <section class="preview-section">
+        <div class="camera-frame">
+          <canvas id="cameraCanvas" width="800" height="960"></canvas>
+        </div>
       </section>
-      <p id="statusText" class="status">준비 완료</p>
+
+      <section class="controls-section">
+        <div class="control-group">
+          <h3 class="group-title">📸 사진</h3>
+          <div class="file-input-wrapper">
+            <input type="file" id="imageInput" accept="image/*" class="file-input">
+            <button class="btn btn-primary" onclick="document.getElementById('imageInput').click()">
+              사진 선택
+            </button>
+            <span id="fileName" class="file-name">선택된 파일 없음</span>
+          </div>
+          <button class="btn btn-secondary" id="clearBtn">사진 제거</button>
+        </div>
+
+        <div class="control-group">
+          <h3 class="group-title">🎨 카메라 색상</h3>
+          <div class="color-grid">
+            <button class="color-option" data-color="#f5f5f5" style="background: #f5f5f5; border: 3px solid #ddd;" title="화이트"></button>
+            <button class="color-option" data-color="#fff5f7" style="background: #fff5f7; border: 3px solid #ffe6ef;"></button>
+            <button class="color-option" data-color="#f5f8ff" style="background: #f5f8ff; border: 3px solid #e6f2ff;"></button>
+            <button class="color-option" data-color="#fffbf0" style="background: #fffbf0; border: 3px solid #ffe8cc;"></button>
+            <button class="color-option" data-color="#f0fff5" style="background: #f0fff5; border: 3px solid #ccffe6;"></button>
+            <button class="color-option" data-color="#f5f0ff" style="background: #f5f0ff; border: 3px solid #e6d9ff;"></button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3 class="group-title">📍 사진 위치</h3>
+          <label class="slider-label">
+            가로 위치
+            <input type="range" id="imageX" min="0" max="100" step="5" value="50" class="slider">
+            <span class="slider-value" id="imageXValue">50</span>
+          </label>
+          <label class="slider-label">
+            세로 위치
+            <input type="range" id="imageY" min="0" max="100" step="5" value="50" class="slider">
+            <span class="slider-value" id="imageYValue">50</span>
+          </label>
+          <label class="slider-label">
+            크기
+            <input type="range" id="imageScale" min="50" max="150" step="10" value="100" class="slider">
+            <span class="slider-value" id="imageScaleValue">100%</span>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3 class="group-title">✨ 배경</h3>
+          <label class="color-input-label">
+            배경색
+            <input type="color" id="bgColor" value="#e8e8e8" class="color-input">
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3 class="group-title">🎬 애니메이션</h3>
+          <label class="checkbox-label">
+            <input type="checkbox" id="animationToggle">
+            슬라이드 애니메이션 활성화
+          </label>
+          <label class="slider-label">
+            GIF 길이 (초)
+            <input type="range" id="gifDuration" min="1" max="5" step="0.5" value="3" class="slider">
+            <span class="slider-value" id="gifDurationValue">3초</span>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3 class="group-title">💾 저장</h3>
+          <button class="btn btn-success" id="downloadPng">PNG 저장</button>
+          <button class="btn btn-success" id="downloadGif">GIF 저장</button>
+          <button class="btn btn-danger" id="resetBtn">초기화</button>
+        </div>
+      </section>
     </main>
 
-    <aside class="panel" aria-label="편집 패널">
-      <div class="panel-title">
-        <strong>편집 패널</strong>
-        <span>실시간 미리보기</span>
-      </div>
-
-      <details open="">
-        <summary>카메라 설정</summary>
-        <label>카메라 색상
-          <div class="color-preset-row">
-            <button data-camera-color="#f5f5f5" type="button" class="color-btn" style="background: #f5f5f5; border: 2px solid #d0d0d0;" title="화이트">화이트</button>
-            <button data-camera-color="#ffe4e1" type="button" class="color-btn" style="background: #ffe4e1; border: 2px solid #ffcccc;">미스티로즈</button>
-            <button data-camera-color="#f0e6ff" type="button" class="color-btn" style="background: #f0e6ff; border: 2px solid #e0d4ff;">라벤더</button>
-            <button data-camera-color="#e6f3ff" type="button" class="color-btn" style="background: #e6f3ff; border: 2px solid #cce5ff;">스카이블루</button>
-            <button data-camera-color="#e6ffe6" type="button" class="color-btn" style="background: #e6ffe6; border: 2px solid #ccffcc;">민트</button>
-            <button data-camera-color="#fff5e6" type="button" class="color-btn" style="background: #fff5e6; border: 2px solid #ffe6cc;">크림</button>
-            <button data-camera-color="#2a2a2a" type="button" class="color-btn" style="background: #2a2a2a; border: 2px solid #1a1a1a;" title="어두운 회색">차콜</button>
-          </div>
-        </label>
-      </details>
-
-      <details open="">
-        <summary>사진 업로드</summary>
-        <div class="file-row">
-          <input id="photoInput" type="file" accept="image/*">
-          <button id="pickPhoto" type="button">사진 선택</button>
-          <span id="photoStatus" class="file-status">사진 없음</span>
-          <button id="clearPhoto" type="button" class="ghost">제거</button>
-        </div>
-        <label class="check">
-          <input id="autoAspect" type="checkbox" checked="">
-          자동 비율 조정
-        </label>
-      </details>
-
-      <details open="">
-        <summary>사진 위치 및 크기</summary>
-        <label>가로 위치 (px)
-          <input id="photoX" type="range" min="0" max="300" step="5" value="100">
-          <span id="photoXValue">100</span>
-        </label>
-        <label>세로 위치 (px)
-          <input id="photoY" type="range" min="0" max="400" step="5" value="120">
-          <span id="photoYValue">120</span>
-        </label>
-        <label>크기 (%)
-          <input id="photoScale" type="range" min="50" max="150" step="5" value="100">
-          <span id="photoScaleValue">100%</span>
-        </label>
-      </details>
-
-      <details>
-        <summary>배경 설정</summary>
-        <label>배경 색상
-          <input id="bgColor" type="color" value="#f5f1f0">
-        </label>
-        <label>그라데이션 강도
-          <input id="gradientIntensity" type="range" min="0" max="100" step="10" value="30">
-          <span id="gradientValue">30%</span>
-        </label>
-      </details>
-
-      <details>
-        <summary>GIF 애니메이션</summary>
-        <label>GIF 길이 (초)
-          <input id="gifSeconds" type="range" min="1" max="5" step="0.5" value="2.5">
-          <span id="gifSecondsValue">2.5초</span>
-        </label>
-        <label class="check">
-          <input id="animationType" type="checkbox">
-          슬라이드 애니메이션 활성화
-        </label>
-        <p class="note">GIF는 자동으로 고화질(6배)로 저장됩니다.</p>
-      </details>
-
-      <details open="">
-        <summary>저장</summary>
-        <div class="save-grid">
-          <button id="downloadPng" type="button">PNG 저장</button>
-          <button id="downloadGif" type="button" class="primary">GIF 저장</button>
-          <button id="resetBtn" type="button" class="danger">초기화</button>
-        </div>
-        <p class="note">PNG와 GIF 모두 인터넷 없이 작동합니다. 결과물은 항상 1280×1600 고정 사이즈입니다.</p>
-      </details>
-    </aside>
+    <footer class="footer">
+      <p>© 2024 Instant Polaroid Maker | Made with 💙</p>
+    </footer>
   </div>
 
-  <script src="./gif.js"></script>
-  <script src="./script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

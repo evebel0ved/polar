@@ -397,7 +397,7 @@
 
     // diagonal cross-hatched waffle texture
     // 세로 줄무늬 패턴
-  var step = 3.5; // 선 사이 간격
+  var step = 6.0; // 선 사이 간격
   for (var ix = x + 3; ix < x + w - 3; ix += step) {
     // 음영 선
     ctx.beginPath();
@@ -552,7 +552,6 @@
     // faint top hardware — strap lug (left) and geared advance dial with
     // strap lug (right), both low-contrast like the reference photo
     drawTopNub(ctx, bx + bw * 0.22, by - 1 * k, 22 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
-    drawTopNub(ctx, bx + bw * 0.70, by - 2 * k, 18 * k, 18 * k, 0, shade(body, isDark ? 8 : -5));
     drawGearedTopDial(ctx, bx + bw * 0.69, by - 2 * k, 42 * k, 8 * k, isDark);
 
     // shoulder plate — a neutral silver-grey top panel, independent of the
@@ -595,7 +594,7 @@
     drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
     // red vertical status LED
-    drawStatusLED(ctx, bx + bw * 0.772, shY - L.shoulderH * 0.225, bw * 0.022, L.shoulderH * 0.45);
+    drawStatusLED(ctx, bx + bw * 0.748, shY - L.shoulderH * 0.225, bw * 0.022, L.shoulderH * 0.45);
 
     // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);

@@ -4,6 +4,10 @@
   // ---------------------------------------------------------------------
   // Constants & state
   // ---------------------------------------------------------------------
+  // W is fixed; H now depends on orientation (see applyOrientationDims) —
+  // vertical exports/preview use a square canvas, horizontal uses a
+  // shorter canvas (less empty space above/below). Both get corrected
+  // by applyOrientationDims() before the very first render.
   var W = 1400, H = 800;
 
   var CAMERA_COLORS = [
@@ -41,13 +45,13 @@
   var state = {
     cameraColorIndex: 0,
     bgColorIndex: 0,
-    bgMode: "color",
-    orientation: "vertical",          // ← 기본을 세로로 변경
+    bgMode: "color",           // "color" | "blur"
+    orientation: "horizontal", // "vertical" | "horizontal" — horizontal is now default
     captionText: "INSTANT",
-    serialText: "N° 01",
+    serialText: "N° 01",       // customizable frame-number label printed on the card margin
     photoImg: null,
-    photoImg2: null,
-    photoImg3: null,
+    photoImg2: null,           // 2nd photo — only used for GIF/video (stacks on top of photo 1)
+    photoImg3: null,           // 3rd photo — only used for GIF/video (stacks on top of photo 2)
     scale: 6,
     gifSeconds: 1.4,
     gifLoop: true,
@@ -159,29 +163,47 @@
   }
 
   // ---------------------------------------------------------------------
-  // Scene layout
+  // Scene layout (logical W×H coordinate space — fixed per orientation
+  // regardless of device, so preview and every exported file share one
+  // composition). W is always 1400; H is 800 for horizontal or 1400
+  // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
   var CARD_DIMS = {
+    // vertical card is narrower than the (now bigger) camera body so the
+    // ejected photo stays visually contained within the camera's footprint
+    // instead of poking out past its left/right edges
     vertical:   { w: 420, h: 500, side: "bottom", margin: 92 },
-    // 가로: 사진 크기 키움
-    horizontal: { w: 500, h: 350, side: "right",  margin: 92 }
+    // horizontal card is height-capped so it never extends past the
+    // camera body's top/bottom edges (see cameraCenter() below) —
+    // enlarged as far as that cap allows (max ~330 at this bodyH/shoulderH)
+    horizontal: { w: 480, h: 324, side: "right",  margin: 92 }
   };
 
+  // horizontal (landscape) layout — card ejects sideways from under the
+  // camera's right edge, so the canvas only needs to be tall enough for
+  // the camera body itself. Recomputed off the current H so the reduced
+  // (non-square) horizontal canvas still keeps the camera vertically
+  // centered instead of assuming a fixed 1000px-tall canvas.
   function computeHorizontalLayout() {
     var bodyW = 620, bodyH = 424, bodyR = 36, shoulderH = 94;
     var bodyY = Math.max(24, Math.round((H - bodyH) / 2) - 18);
     return { bodyX: 180, bodyY: bodyY, bodyW: bodyW, bodyH: bodyH, bodyR: bodyR, shoulderH: shoulderH };
   }
 
+  // vertical (portrait) layout — camera sits near the top, card ejects
+  // straight down. Enlarged (same 620:424 body ratio, so every hardware
+  // element positioned/sized off bw/bh/k inside drawCamera scales
+  // automatically). With the canvas now square, the whole camera+card
+  // group is vertically centered in the available height rather than
+  // pinned near the top, so the extra square space reads as intentional
+  // framing instead of empty padding.
   function computeVerticalLayout() {
-    // 스케일 1.0으로 키우고 여백 대폭 축소
-    var VERTICAL_SCALE = 1.0;
+    var VERTICAL_SCALE = 580 / 620;
     var bodyW = 620 * VERTICAL_SCALE, bodyH = 424 * VERTICAL_SCALE,
         bodyR = 36 * VERTICAL_SCALE, shoulderH = 94 * VERTICAL_SCALE;
     var cardH = CARD_DIMS.vertical.h;
     var totalContentH = bodyH + cardH;
-    // 상단 그림자가 튀어나오지 않도록 최소값 확보
-    var bodyY = Math.max(55, Math.round((H - totalContentH) / 2));
+    var bodyY = Math.max(30, Math.round((H - totalContentH) / 2));
     return {
       bodyX: (W - bodyW) / 2,
       bodyY: bodyY,
@@ -193,11 +215,14 @@
     return orientation === "vertical" ? computeVerticalLayout() : computeHorizontalLayout();
   }
 
+  // Sets W/H for the chosen orientation and resizes the actual <canvas>
+  // element to match, so the preview's intrinsic aspect ratio (and every
+  // export, which reads W/H at save time) always matches what's selected.
   function applyOrientationDims(orientation) {
     if (orientation === "vertical") {
-      W = 1400; H = 1150;   // ← 여백 대폭 축소 (기존 1400 → 1150)
+      W = 1400; H = 1400; // square canvas
     } else {
-      W = 1400; H = 800;
+      W = 1400; H = 800;  // shorter canvas — less empty space above/below
     }
     stage.width = W;
     stage.height = H;
@@ -211,6 +236,8 @@
     };
   }
 
+  // horizontal orientation: card slides out sideways from under the
+  // camera body's right edge
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
@@ -218,6 +245,9 @@
     return lerp(startX, endX, e);
   }
 
+  // vertical orientation: card ejects straight down — starts fully behind
+  // the camera body (never above its top edge) and slides down to rest
+  // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
     var startY = Math.max(bodyBottom - cardH + 56, L.bodyY);
@@ -230,6 +260,8 @@
   // ---------------------------------------------------------------------
   function drawColorBackground(ctx, colorDef) {
     var isDark = isDarkColor(colorDef.body);
+    // light backgrounds are pre-lightened before building the gradient;
+    // already-dark colors (charcoal/ink/slate/…) are left exactly as-is
     var base = isDark ? colorDef.body : shade(colorDef.body, 38);
     var edge = isDark ? shade(colorDef.body, -35) : shade(base, -6);
     var g = ctx.createRadialGradient(W * 0.32, H * 0.28, 60, W * 0.5, H * 0.55, W * 0.8);
@@ -246,61 +278,46 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Some mobile browsers (notably several mobile WebViews / older Safari)
+  // silently ignore ctx.filter — no exception is thrown, it just no-ops —
+  // so the try/catch below never caught it and the background rendered
+  // unblurred. This checks support for real by round-tripping the value.
   var _canvasFilterSupport = null;
   function supportsCanvasFilter() {
     if (_canvasFilterSupport !== null) return _canvasFilterSupport;
     try {
       var probe = document.createElement("canvas").getContext("2d");
-      if (!("filter" in probe)) {
-        _canvasFilterSupport = false;
-        return false;
-      }
       probe.filter = "blur(2px)";
-      // 일부 모바일 브라우저는 값을 정규화하므로 indexOf로 확인
-      var f = String(probe.filter || "");
-      _canvasFilterSupport = f.indexOf("blur") !== -1;
+      _canvasFilterSupport = probe.filter === "blur(2px)";
     } catch (e) {
       _canvasFilterSupport = false;
     }
     return _canvasFilterSupport;
   }
 
-  // 모바일에서도 확실한 블러를 위한 강화된 수동 블러
+  // Manual blur fallback for browsers without ctx.filter support: drawing
+  // the source image far smaller and letting the browser's own bitmap
+  // smoothing scale it back up approximates a soft gaussian blur without
+  // depending on the filter API at all, so it works everywhere.
   function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
-    var factor = clamp(blurRadius / 2.2, 10, 100); // 더 강하게
-    var smallW = Math.max(4, Math.round(destW / factor));
-    var smallH = Math.max(4, Math.round(destH / factor));
-
+    var factor = clamp(blurRadius / 3, 6, 60);
+    var smallW = Math.max(6, Math.round(destW / factor));
+    var smallH = Math.max(6, Math.round(destH / factor));
     var small = document.createElement("canvas");
-    small.width = smallW;
-    small.height = smallH;
+    small.width = smallW; small.height = smallH;
     var sctx = small.getContext("2d");
-    sctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in sctx) sctx.imageSmoothingQuality = "high";
     sctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, smallW, smallH);
-
-    // 한 단계 더 다운샘플 → 더 부드러운 블러
-    var midW = Math.max(3, Math.round(smallW * 0.55));
-    var midH = Math.max(3, Math.round(smallH * 0.55));
-    var mid = document.createElement("canvas");
-    mid.width = midW;
-    mid.height = midH;
-    var mctx = mid.getContext("2d");
-    mctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in mctx) mctx.imageSmoothingQuality = "high";
-    mctx.drawImage(small, 0, 0, smallW, smallH, 0, 0, midW, midH);
-
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(mid, 0, 0, midW, midH, destX, destY, destW, destH);
+    ctx.drawImage(small, 0, 0, smallW, smallH, destX, destY, destW, destH);
     ctx.restore();
   }
 
   function drawBlurredPhotoBackground(ctx, photoImg) {
     var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, W, H);
-    var pad = 100;
-    var blurRadius = 48;
+    var pad = 80;
+    var blurRadius = 42;
     ctx.save();
     if (supportsCanvasFilter()) {
       try {
@@ -332,10 +349,14 @@
   }
 
   // ---------------------------------------------------------------------
-  // Camera
+  // Camera — detailed body render (rounded-body instant camera with a
+  // large center lens, inspired by classic instant-camera proportions —
+  // no brand names or wordmarks are drawn anywhere on the body/lens)
   // ---------------------------------------------------------------------
   function drawToggleKnob(ctx, x, y, r, body, isDark) {
     ctx.save();
+
+    // recessed body-colored collar the knob sits inside
     ctx.beginPath();
     ctx.arc(x, y, r * 1.22, 0, Math.PI * 2);
     ctx.fillStyle = shade(body, isDark ? -14 : -10);
@@ -351,6 +372,7 @@
     ctx.lineWidth = 3;
     ctx.stroke();
 
+    // dark knurled dial face
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     var grad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.15, x, y, r);
@@ -360,6 +382,7 @@
     ctx.fillStyle = grad;
     ctx.fill();
 
+    // fine ridged edge
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -380,12 +403,14 @@
     ctx.strokeStyle = "rgba(0,0,0,0.4)";
     ctx.stroke();
 
+    // thin metallic rim highlight (top-left arc)
     ctx.beginPath();
     ctx.arc(x, y, r - 2, Math.PI * 1.05, Math.PI * 1.75);
     ctx.strokeStyle = "rgba(255,255,255,0.24)";
     ctx.lineWidth = 1.4;
     ctx.stroke();
 
+    // raised center dial
     ctx.beginPath();
     ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
     var capGrad = ctx.createRadialGradient(x - r * 0.2, y - r * 0.24, r * 0.05, x, y, r * 0.62);
@@ -398,6 +423,9 @@
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.stroke();
 
+    // protruding grip lever — a small metallic tab sticking out past the
+    // collar, like a manual advance/rewind lever, so the knob reads as a
+    // real turnable control rather than a flat disc
     var leverAngle = -Math.PI / 2 - 0.25;
     ctx.save();
     ctx.translate(x, y);
@@ -415,6 +443,8 @@
     ctx.stroke();
     ctx.restore();
 
+    // single index dot marking the lever's resting position (replaces the
+    // old pair of overlapping dots for a cleaner face)
     var idx = x + Math.cos(leverAngle) * r * 0.4;
     var idy = y + Math.sin(leverAngle) * r * 0.4;
     ctx.beginPath();
@@ -422,6 +452,7 @@
     ctx.fillStyle = "rgba(238,236,232,0.95)";
     ctx.fill();
 
+    // soft highlight on the cap for depth
     ctx.beginPath();
     ctx.ellipse(x - r * 0.16, y - r * 0.18, r * 0.09, r * 0.05, -0.5, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.3)";
@@ -446,23 +477,29 @@
     ctx.restore();
   }
 
-  function drawShutterButton(ctx, x, y, r) {
+ function drawShutterButton(ctx, x, y, r) {
     ctx.save();
+    
+    // 바깥쪽 얇은 테두리
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#cccccc";
+    ctx.fillStyle = "#cccccc"; 
     ctx.fill();
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.15)";
     ctx.stroke();
 
+    // 납작한 안쪽 버튼면
     ctx.beginPath();
     ctx.arc(x, y, r * 0.85, 0, Math.PI * 2);
-    ctx.fillStyle = "#e6e6e6";
+    ctx.fillStyle = "#e6e6e6"; // 단색에 가까운 밝은 톤
     ctx.fill();
+    
+    // 미세한 빛 반사 테두리만 추가하여 평면적인 느낌 강조
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(255,255,255,0.7)";
     ctx.stroke();
+    
     ctx.restore();
   }
 
@@ -483,6 +520,7 @@
 
   function drawRidgedSwitch(ctx, x, y, w, h, body, isDark) {
     ctx.save();
+    // sunken bezel
     roundRectPath(ctx, x - 3, y - 3, w + 6, h + 6, (h + 6) / 2);
     ctx.fillStyle = shade(body, isDark ? -22 : -16);
     ctx.fill();
@@ -497,22 +535,26 @@
     ctx.fillStyle = g;
     ctx.fillRect(x, y, w, h);
 
-    var step = 6.0;
-    for (var ix = x + 3; ix < x + w - 3; ix += step) {
-      ctx.beginPath();
-      ctx.moveTo(ix, y);
-      ctx.lineTo(ix, y + h);
-      ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.3)";
-      ctx.lineWidth = 1.1;
-      ctx.stroke();
+    // diagonal cross-hatched waffle texture
+    // 세로 줄무늬 패턴
+  var step = 6.0; // 선 사이 간격
+  for (var ix = x + 3; ix < x + w - 3; ix += step) {
+    // 음영 선
+    ctx.beginPath();
+    ctx.moveTo(ix, y);
+    ctx.lineTo(ix, y + h);
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
 
-      ctx.beginPath();
-      ctx.moveTo(ix + 1, y);
-      ctx.lineTo(ix + 1, y + h);
-      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.25)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    // 밝은 광택 선 (입체감 효과)
+    ctx.beginPath();
+    ctx.moveTo(ix + 1, y);
+    ctx.lineTo(ix + 1, y + h);
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
     ctx.restore();
 
     roundRectPath(ctx, x, y, w, h, h / 2);
@@ -565,8 +607,10 @@
     ctx.restore();
   }
 
-  function drawGearedTopDial(ctx, x, y, w, h, isDark) {
+ function drawGearedTopDial(ctx, x, y, w, h, isDark) {
     ctx.save();
+
+    // 1. 납작하고 둥근 다이얼 몸통
     roundRectPath(ctx, x - w / 2, y - h / 2, w, h, 2);
     var g = ctx.createLinearGradient(x - w / 2, y, x + w / 2, y);
     g.addColorStop(0, "#19191b");
@@ -576,6 +620,7 @@
     ctx.fillStyle = g;
     ctx.fill();
 
+    // 2. 세로 톱니 패턴
     var step = 3.5;
     for (var ix = x - w / 2 + 2; ix < x + w / 2 - 1; ix += step) {
       ctx.beginPath();
@@ -585,6 +630,7 @@
       ctx.lineWidth = 1;
       ctx.stroke();
 
+      // 밝은 하이라이트 선
       ctx.beginPath();
       ctx.moveTo(ix + 1, y - h / 2);
       ctx.lineTo(ix + 1, y + h / 2);
@@ -593,10 +639,12 @@
       ctx.stroke();
     }
 
+    // 3. 외곽선
     roundRectPath(ctx, x - w / 2, y - h / 2, w, h, 2);
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
     ctx.stroke();
+
     ctx.restore();
   }
 
@@ -611,20 +659,20 @@
     ctx.fill();
     ctx.restore();
   }
-
+  
   function drawCamera(ctx, colorDef, L) {
     L = L || computeHorizontalLayout();
     var body = colorDef.body;
     var isDark = isDarkColor(body);
     var bw = L.bodyW, bh = L.bodyH, bx = L.bodyX, by = L.bodyY;
-    var k = bw / 620;
+    var k = bw / 620; // proportional scale for hardware sizing
 
     ctx.save();
-    // 그림자 살짝 줄여서 세로모드 상단 튀어나옴 방지
     ctx.shadowColor = "rgba(20,16,12,0.28)";
-    ctx.shadowBlur = 32 * k;
-    ctx.shadowOffsetY = 14 * k;
+    ctx.shadowBlur = 40 * k;
+    ctx.shadowOffsetY = 18 * k;
 
+    // body
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
     var bodyGrad = ctx.createLinearGradient(0, by, 0, by + bh);
     bodyGrad.addColorStop(0, shade(body, isDark ? 6 : 10));
@@ -634,14 +682,26 @@
     ctx.fill();
     ctx.restore();
 
+
+    // body edge line
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
-    ctx.lineWidth = bw * 0.015;
-    ctx.strokeStyle = "#e0e0e0";
+    ctx.lineWidth = bw * 0.015; // 테두리를 더 두껍게
+    ctx.strokeStyle = "#e0e0e0"; // 연한 회색/흰색 테두리로 변경
     ctx.stroke();
 
+    // faint top hardware — strap lug (left) and geared advance dial with
+    // strap lug (right), both low-contrast like the reference photo.
+    // Pulled further above the top edge (by - 12*k instead of by - 1/2*k)
+    // so neither shape overlaps the body's border stroke, widened, and
+    // the right-hand dial moved further right and away from the button
+    // below it.
     drawTopNub(ctx, bx + bw * 0.22, by - 12 * k, 34 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
     drawGearedTopDial(ctx, bx + bw * 0.78, by - 12 * k, 60 * k, 8 * k, isDark);
 
+    // shoulder plate — a neutral silver-grey top panel, independent of the
+    // body shell color (matches the reference: the top plate reads as a
+    // fixed metal/plastic tone across every colorway, only going dark on
+    // the charcoal body)
     var plateColor = isDark ? shade(body, -4) : "#d8d7d3";
     roundRectPath(ctx, bx, by, bw, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
     var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
@@ -658,28 +718,40 @@
 
     var shY = by + L.shoulderH * 0.56;
 
+    // 텍스트
     ctx.save();
     ctx.font = "bold " + (bw * 0.032) + "px 'Helvetica Neue', Helvetica, sans-serif";
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = "#ffffff"; // 흰색 글씨
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText("POLAROID", bx + bw * 0.06, shY);
     ctx.restore();
-
+    
+    // red logo dot — moved left (closer to the wordmark) from 0.354 to 0.27
     drawLogoDot(ctx, bx + bw * 0.27, shY, bw * 0.038);
 
-    var winW = bw * 0.11, winH = winW * 0.65;
+    // grey sensor / viewfinder window
+    var winW = bw * 0.11, winH = winW * 0.65; 
     drawWindow(ctx, bx + bw * 0.506 - winW / 2, shY - winH / 2, winW, winH);
 
+    // chrome shutter button
     drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
+    // red vertical status LED
     drawStatusLED(ctx, bx + bw * 0.748, shY - L.shoulderH * 0.225, bw * 0.022, L.shoulderH * 0.45);
 
+    // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);
 
+    // bottom-left toggle knob
     var c = cameraCenter(L);
     drawToggleKnob(ctx, bx + bw * 0.11, by + bh * 0.84, bw * 0.054, body, isDark);
 
+    // 바디 하이라이트 (상단에 위치 — 빛이 위에서 들어오는 느낌)
+    // uses a radial gradient (opaque near the top-left corner, fading to
+    // fully transparent) instead of a flat-alpha shape, so it blends
+    // softly into the body instead of ending on a hard edge; clipped to
+    // the rounded body path so it can't poke out past the corner.
     ctx.save();
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
     ctx.clip();
@@ -692,11 +764,14 @@
     ctx.fillStyle = hg;
     ctx.fillRect(bx, by, bw, bh);
     ctx.restore();
-
+    
+    // lens assembly
     drawLens(ctx, c.cx, c.cy, bw * 0.237);
 
+    // soft diagonal light sweep across the body for a glossier, 3D feel
     drawBodyLightSweep(ctx, L, isDark);
 
+    // subtle bottom inner shadow (ground the body, add depth)
     ctx.save();
     roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
     ctx.clip();
@@ -713,11 +788,13 @@
   function drawLens(ctx, cx, cy, R) {
     ctx.save();
 
+    // recessed mount collar (depth behind the lens)
     ctx.beginPath();
     ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
     ctx.fillStyle = "#030303";
     ctx.fill();
 
+    // thin bright chrome trim ring where the lens meets the body
     ctx.beginPath();
     ctx.arc(cx, cy, R + 6, 0, Math.PI * 2);
     var trimGrad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
@@ -728,6 +805,7 @@
     ctx.lineWidth = 3;
     ctx.stroke();
 
+    // outer bezel
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     var bezelGrad = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.1, cx, cy, R);
@@ -736,44 +814,56 @@
     ctx.fillStyle = bezelGrad;
     ctx.fill();
 
-    ctx.strokeStyle = "#3d3d3d";
-    var knInner = R * 0.33;
-    for (let i = 0; i < 18; i++) {
-      let rr = R - 8 - i * 6;
-      if (rr < knInner) break;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+    // outer knurled ring band (dense fine ridges, like a focus/filter ring)
+// Leica 스타일 동심원
+
+ctx.strokeStyle = "#3d3d3d";
+
+var knInner = R * 0.33;
+
+for (let i = 0; i < 18; i++) {
+
+    let rr = R - 8 - i * 6;
+
+    if (rr < knInner) break;
 
     ctx.beginPath();
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.lineWidth = 1;
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
     ctx.stroke();
+}
 
-    ctx.beginPath();
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
-    var centerGrad = ctx.createRadialGradient(
-      cx - knInner * 0.25,
-      cy - knInner * 0.25,
-      knInner * 0.08,
-      cx,
-      cy,
-      knInner
-    );
-    centerGrad.addColorStop(0, "#1d1d1d");
-    centerGrad.addColorStop(0.5, "#0c0c0c");
-    centerGrad.addColorStop(1, "#000000");
-    ctx.fillStyle = centerGrad;
-    ctx.fill();
+// 마지막 동심원
+ctx.beginPath();
+ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
+ctx.strokeStyle = "rgba(255,255,255,0.1)";
+ctx.lineWidth = 1;
+ctx.stroke();
 
-    ctx.restore();
+// 가운데 검정 원
+ctx.beginPath();
+ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
+
+var centerGrad = ctx.createRadialGradient(
+    cx - knInner * 0.25,
+    cy - knInner * 0.25,
+    knInner * 0.08,
+    cx,
+    cy,
+    knInner
+);
+
+centerGrad.addColorStop(0, "#1d1d1d");
+centerGrad.addColorStop(0.5, "#0c0c0c");
+centerGrad.addColorStop(1, "#000000");
+
+ctx.fillStyle = centerGrad;
+ctx.fill();
+    
+    ctx.restore(); 
   }
-
   // ---------------------------------------------------------------------
-  // Polaroid card
+  // Polaroid card (orientation aware)
   // ---------------------------------------------------------------------
   function drawPhotoCard(ctx, e, photoImg, orientation, captionText, serialText, L, stack) {
     L = L || computeHorizontalLayout();
@@ -781,14 +871,18 @@
     var dims = CARD_DIMS[orientation] || CARD_DIMS.vertical;
     var left, top;
     if (orientation === "vertical") {
+      // camera sits at the top of the frame; card ejects straight down,
+      // centered under it
       left = (W - dims.w) / 2;
       top = cardTopAt(e, dims.h, L);
     } else {
       var c = cameraCenter(L);
       left = cardLeftAt(e, dims.w, L);
-      // 아주 조금만 위로 이동 (+ 크기 키운 만큼 자연스럽게 상단 영역 활용)
-      top = c.cy - dims.h / 2 - 10;
+      top = c.cy - dims.h / 2;
     }
+    // stacked photos (2nd/3rd) settle slightly offset & rotated from the
+    // first, like a scattered pile of instant prints, instead of sitting
+    // in an identical spot on top of one another
     left += stack.x || 0;
     top += stack.y || 0;
 
@@ -830,11 +924,6 @@
     ctx.save();
     roundRectPath(ctx, pX, pY, pW, pH, 2);
     ctx.clip();
-
-    // ★ 배경색이 사진에 절대 물들지 않도록 흰색 바탕을 먼저 칠함
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(pX, pY, pW, pH);
-
     if (photoImg) {
       var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, pW, pH);
       ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, pX, pY, pW, pH);
@@ -864,10 +953,11 @@
       ctx.fillStyle = "#8b887f";
       ctx.font = "500 15px 'IBM Plex Sans KR', sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("📸 업로드하세요", pX + pW / 2, pY + pH / 2 + 5);
+      ctx.fillText("사진을 업로드하세요", pX + pW / 2, pY + pH / 2 + 5);
     }
 
     if (dims.side === "right") {
+      // vertical margin strip on the right
       var mCenterX = left + dims.w - dims.margin / 2;
       ctx.fillStyle = "#9a968c";
       ctx.font = "500 13px 'IBM Plex Mono', monospace";
@@ -893,12 +983,17 @@
       ctx.fillText(caption, left + dims.w - pad, top + dims.h - dims.margin + 40);
     }
 
-    ctx.restore();
+    ctx.restore(); // closes the outer stack-rotation save opened above
   }
 
   // ---------------------------------------------------------------------
   // Scene render
   // ---------------------------------------------------------------------
+  // Splits a single 0..1 phase into (segment index, local eject progress)
+  // across N photo segments. Each segment gets an equal share of the
+  // phase range; within a segment the first 70% is the eject slide
+  // (eased) and the remaining 30% is a hold, so multiple photos don't
+  // eject back-to-back with no pause between them.
   function resolveTimelinePosition(phase, segCount) {
     var p = clamp(phase, 0, 1);
     if (segCount <= 1) {
@@ -913,13 +1008,18 @@
     return { idx: idx, localE: localE };
   }
 
-  // 스택 오프셋 축소 → 2·3번째 사진이 카메라 밖으로 안 나감
+  // Stacked (2nd/3rd) photos settle slightly offset & rotated from the
+  // first, like a scattered pile of instant prints landing on top of
+  // one another, instead of sitting in an identical spot.
   function stackOffsetFor(i) {
     if (i === 0) return { x: 0, y: 0, rot: 0 };
     var dir = i % 2 === 1 ? 1 : -1;
-    return { x: dir * (8 + i * 3), y: i * 5, rot: dir * (2.5 + i * 1.2) };
+    return { x: dir * (10 + i * 4), y: i * 8, rot: dir * (3 + i * 1.5) };
   }
 
+  // If the label ends in digits (like the default "N° 01"), each stacked
+  // card auto-increments that trailing number; otherwise every card
+  // just repeats the same custom text as-is.
   function serialForIndex(text, i) {
     var base = (text || "").trim() || "N° 01";
     if (i === 0) return base;
@@ -938,11 +1038,17 @@
     var bgColorDef = BG_COLORS[st.bgColorIndex];
     drawBackground(ctx, bgColorDef, st.bgMode, st.photoImg);
 
+    // 2nd/3rd photos only ever take part here — PNG export always calls
+    // this with a state clone that has photoImg2/3 cleared, so a plain
+    // still export never shows a stack, per spec.
     var photos = [st.photoImg];
     if (st.photoImg2) photos.push(st.photoImg2);
     if (st.photoImg3) photos.push(st.photoImg3);
     var pos = resolveTimelinePosition(phase, photos.length);
 
+    // cards drawn first (in stacking order), camera drawn on top — the
+    // part of each card still "inside" the body gets covered by the
+    // camera, giving the eject effect
     for (var i = 0; i <= pos.idx; i++) {
       var e = (i < pos.idx) ? 1 : pos.localE;
       drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
@@ -1017,6 +1123,9 @@
     render();
   }
 
+  // slot 1 = state.photoImg (used everywhere), slot 2/3 = state.photoImg2/3
+  // (only ever drawn during GIF/video export & preview, stacked on top of
+  // slot 1 — PNG export always ignores them)
   function handlePhotoFile(file, slot) {
     if (!file || !file.type.match(/^image\//)) return;
     var reader = new FileReader();
@@ -1088,6 +1197,7 @@
     state.gifLoop = gifLoopBox.checked;
   });
 
+  // preview animation (visible canvas only — not exported)
   var rafId = null;
   playPreviewBtn.addEventListener("click", function () {
     if (state.playing) {
@@ -1117,7 +1227,7 @@
   });
 
   // ---------------------------------------------------------------------
-  // PNG export
+  // PNG export — same composition, rendered at N× resolution
   // ---------------------------------------------------------------------
   function downloadBlob(blob, filename) {
     var url = URL.createObjectURL(blob);
@@ -1140,6 +1250,8 @@
       off.height = H * scale;
       var octx = off.getContext("2d");
       octx.scale(scale, scale);
+      // PNG only ever shows the first photo — the 2nd/3rd stack is a
+      // GIF/video-only feature
       var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
       renderScene(octx, 1, pngState);
       off.toBlob(function (blob) {
@@ -1151,8 +1263,12 @@
   });
 
   // ---------------------------------------------------------------------
-  // GIF export
+  // GIF export — median-cut palette + LZW encoder (no external libraries)
   // ---------------------------------------------------------------------
+  // Pools color samples across every frame (not just the final still frame)
+  // so the single global palette actually represents the whole animation —
+  // this alone removes most of the visible color-shift/banding between
+  // frames that made saved GIFs look broken.
   function buildPaletteFromFrames(dataArrays, maxColors) {
     var samples = [];
     var strideEach = Math.max(4 * 6, Math.floor((4 * 5 * dataArrays.length) / 3));
@@ -1217,6 +1333,7 @@
     };
   }
 
+  // 8x8 Bayer matrix (0..63), used for ordered dithering
   var BAYER8 = [
     0, 32, 8, 40, 2, 34, 10, 42,
     48, 16, 56, 24, 50, 18, 58, 26,
@@ -1228,6 +1345,13 @@
     63, 31, 55, 23, 61, 29, 53, 21
   ];
 
+  // Ordered (Bayer) dithering: nudges each pixel by a small, fixed amount
+  // that only depends on its (x, y) position — not on neighboring pixels
+  // or prior frames. That fixed pattern is what makes it work well for
+  // *animated* GIFs: it still breaks up hard 256-color bands on this app's
+  // smooth gradients, but (unlike error-diffusion dithering) the pattern
+  // stays put from frame to frame instead of shifting/shimmering, which is
+  // what made the animation look noisy/broken rather than smoother.
   function imageDataToIndicesOrderedDither(data, w, h, nearestIndexFn, strength) {
     strength = strength || 20;
     var out = new Uint8Array(w * h);
@@ -1254,6 +1378,13 @@
     return out;
   }
 
+  // --- byte writer ---------------------------------------------------------
+  // Growable Uint8Array-backed buffer instead of a plain JS array with
+  // .push(). A hand-rolled GIF of several megapixels × many frames can
+  // produce tens of millions of bytes; pushing that many numbers onto a
+  // plain array is slow and memory-heavy enough to crash the tab (this is
+  // the page-error-after-saving bug). Doubling a typed array is both much
+  // faster and much lighter on memory.
   function ByteWriter() {
     this.buf = new Uint8Array(1 << 16);
     this.len = 0;
@@ -1281,6 +1412,7 @@
   };
   ByteWriter.prototype.toUint8Array = function () { return this.buf.subarray(0, this.len); };
 
+  // --- LZW encoder (standard GIF LZW/variable-width code algorithm) ------
   var EOF = -1, BITS = 12, HSIZE = 5003;
   var MASKS = [0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F,
     0x00FF, 0x01FF, 0x03FF, 0x07FF, 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF];
@@ -1434,7 +1566,7 @@
     }
     frames.forEach(function (frame) {
       out.writeByte(0x21); out.writeByte(0xf9); out.writeByte(4);
-      out.writeByte(0x08);
+      out.writeByte(0x08); // disposal: restore to background
       var delayCs = Math.max(2, Math.round(frame.delay / 10));
       out.writeByte(delayCs & 0xff); out.writeByte((delayCs >> 8) & 0xff);
       out.writeByte(0);
@@ -1470,13 +1602,16 @@
 
     setTimeout(function () {
       try {
-        var gifScale = 1.7;   // ← 살짝 올려서 모바일에서 도트가 덜 보이게
+        var gifScale = 1.6;
         var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
         var off = document.createElement("canvas");
         off.width = gw; off.height = gh;
         var octx = off.getContext("2d");
         octx.scale(gifScale, gifScale);
 
+        // more photos in the stack means more frames overall, so trim the
+        // per-segment step count a bit past 1 photo to keep total frame
+        // count (and encode time/file size) reasonable
         var photoCount = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var slideSteps = photoCount > 1 ? 10 : 16;
         var holdSteps = photoCount > 1 ? 3 : 6;
@@ -1486,6 +1621,7 @@
         var perFrameMs = totalMs / totalSteps;
         var phases = [];
         for (var s = 0; s <= totalSteps; s++) phases.push(s / totalSteps);
+        // brief extra hold on the final resting shot
         for (var h = 0; h < (photoCount > 1 ? 8 : 6); h++) phases.push(1);
 
         var rawFrames = [];
@@ -1497,6 +1633,8 @@
         statusText.textContent = "GIF 색상 팔레트 계산 중…";
         setTimeout(function () {
           try {
+            // palette pooled across every frame — not just the last still
+            // frame — so colors stay consistent through the whole animation
             var palette = buildPaletteFromFrames(rawFrames.map(function (f) { return f.data; }), 256);
             var nearest = makeNearestIndexFn(palette);
 
@@ -1504,9 +1642,18 @@
             setTimeout(function () {
               try {
                 var frames = rawFrames.map(function (imgData) {
+                  // ordered (Bayer) dithering: smooths gradient banding
+                  // without the frame-to-frame shimmer error-diffusion
+                  // dithering caused on this animation
                   return {
-                    // strength 5로 낮춤 → 확대 안 해도 도트가 거의 안 보임
-                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 5),
+                    // strength lowered from 20 to 9: the old value shifted
+                    // pixels enough to read as a fixed dot/grain pattern
+                    // once a phone downsamples the image to fit the
+                    // screen (it only disappeared when zoomed in to 100%,
+                    // which is exactly what "aliased dither pattern" looks
+                    // like). This still breaks flat-color/gradient banding
+                    // without being visible at normal viewing sizes.
+                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 9),
                     delay: perFrameMs
                   };
                 });
@@ -1532,7 +1679,11 @@
   });
 
   // ---------------------------------------------------------------------
-  // Video (WebM) export
+  // Video (WebM) export — uses the browser's own encoder via
+  // canvas.captureStream() + MediaRecorder, so quality is far higher (and
+  // encoding far faster/lighter) than the hand-rolled GIF path above.
+  // Added as a companion "동영상으로 저장" button placed right after the
+  // GIF button, since no video export existed before.
   // ---------------------------------------------------------------------
   function createVideoButton() {
     if (!downloadGifBtn || !downloadGifBtn.parentNode) return null;
@@ -1649,6 +1800,7 @@
   // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------
+  applyOrientationDims(state.orientation);
   buildSwatches();
-  setOrientation(state.orientation);   // 세로 기본 + 버튼 상태까지 한 번에 처리
+  render();
 })();

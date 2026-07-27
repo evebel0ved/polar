@@ -339,10 +339,7 @@
 
   function drawShutterButton(ctx, x, y, r) {
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#e2e2df";
-    ctx.fill();
+   
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.22)";
     ctx.stroke();
@@ -361,11 +358,15 @@
     ctx.fillStyle = "rgba(0,0,0,0.16)";
     ctx.fill();
 
-    ctx.beginPath();
-    ctx.ellipse(x - r * 0.3, y - r * 0.34, r * 0.28, r * 0.15, -0.6, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.65)";
     ctx.fill();
     ctx.restore();
+
+    ctx.beginPath();
+ctx.arc(x,y,r*0.88,0,Math.PI*2);
+ctx.strokeStyle="rgba(255,255,255,.45)";
+ctx.lineWidth=1;
+ctx.stroke();
   }
 
   function drawStatusLED(ctx, x, y, w, h) {
@@ -401,23 +402,21 @@
     ctx.fillRect(x, y, w, h);
 
     // diagonal cross-hatched waffle texture
-    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)";
-    ctx.lineWidth = 1.1;
-    var step = 5.5;
-    for (var i = -h; i < w + h; i += step) {
-      ctx.beginPath();
-      ctx.moveTo(x + i, y);
-      ctx.lineTo(x + i + h, y + h);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.16)";
-    for (var j = -h; j < w + h; j += step) {
-      ctx.beginPath();
-      ctx.moveTo(x + j, y + h);
-      ctx.lineTo(x + j + h, y);
-      ctx.stroke();
-    }
-    ctx.restore();
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+ctx.lineWidth = 1;
+
+var gap = w / 10;
+
+for (var i = 1; i < 10; i++) {
+
+    var xx = x + gap * i;
+
+    ctx.beginPath();
+    ctx.moveTo(xx, y + 3);
+    ctx.lineTo(xx, y + h - 3);
+    ctx.stroke();
+
+}
 
     roundRectPath(ctx, x, y, w, h, h / 2);
     ctx.lineWidth = 1;
@@ -554,11 +553,52 @@
     // fixed metal/plastic tone across every colorway, only going dark on
     // the charcoal body)
     var plateColor = isDark ? shade(body, -4) : "#d8d7d3";
-    roundRectPath(ctx, bx, by, bw, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
-    var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
-    plateGrad.addColorStop(0, shade(plateColor, 8));
-    plateGrad.addColorStop(1, shade(plateColor, -10));
-    ctx.fillStyle = plateGrad;
+
+roundRectPath(ctx, bx, by, bw, L.shoulderH, {
+    tl: L.bodyR,
+    tr: L.bodyR,
+    br: 0,
+    bl: 0
+});
+
+var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
+
+plateGrad.addColorStop(0, shade(plateColor, 8));
+plateGrad.addColorStop(1, shade(plateColor, -10));
+
+ctx.fillStyle = plateGrad;
+ctx.fill();
+ctx.save();
+
+roundRectPath(ctx, bx, by, bw, L.shoulderH, {
+    tl: L.bodyR,
+    tr: L.bodyR,
+    br: 0,
+    bl: 0
+});
+
+ctx.clip();
+
+var shine = ctx.createLinearGradient(
+    0,
+    by,
+    0,
+    by + L.shoulderH
+);
+
+shine.addColorStop(0, "rgba(255,255,255,.40)");
+shine.addColorStop(.35, "rgba(255,255,255,.15)");
+shine.addColorStop(1, "rgba(255,255,255,0)");
+
+ctx.fillStyle = shine;
+ctx.fillRect(
+    bx,
+    by,
+    bw,
+    L.shoulderH
+);
+
+ctx.restore();
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(bx, by + L.shoulderH + 0.5);
@@ -579,8 +619,7 @@
     // chrome shutter button
     drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
-    // red vertical status LED
-    drawStatusLED(ctx, bx + bw * 0.771 - bw * 0.009, shY - L.shoulderH * 0.33, bw * 0.018, L.shoulderH * 0.62);
+   
 
     // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);

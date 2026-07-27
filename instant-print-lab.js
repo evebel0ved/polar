@@ -151,17 +151,22 @@
   // ---------------------------------------------------------------------
   // Scene layout (logical 1400x1000 coordinate space — fixed regardless
   // of device, so preview and every exported file share one composition)
+  //
+  // bodyX/bodyY were shifted (+40 / -9 from the original 140/250) so the
+  // camera + ejected polaroid group sits centered in the 1400x1000 frame
+  // for the default (vertical) orientation.
   // ---------------------------------------------------------------------
   var LAYOUT = {
-    bodyX: 140, bodyY: 250, bodyW: 620, bodyH: 424, bodyR: 36,
+    bodyX: 180, bodyY: 241, bodyW: 620, bodyH: 424, bodyR: 36,
     shoulderH: 94
   };
 
   var CARD_DIMS = {
     vertical:   { w: 480, h: 580, side: "bottom", margin: 108 },
     // horizontal card is height-capped so it never extends past the
-    // camera body's top/bottom edges (see cameraCenter() below)
-    horizontal: { w: 430, h: 300, side: "right",  margin: 92 }
+    // camera body's top/bottom edges (see cameraCenter() below) —
+    // enlarged as far as that cap allows (max ~330 at this bodyH/shoulderH)
+    horizontal: { w: 480, h: 324, side: "right",  margin: 92 }
   };
 
   function cameraCenter() {
@@ -303,19 +308,39 @@
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.stroke();
 
-    // two position-marker dots + pointer notch, offset like a real index mark
-    [-0.62, 0.62].forEach(function (off) {
-      var a = -Math.PI / 2 + off;
-      var dx = x + Math.cos(a) * r * 0.4;
-      var dy = y + Math.sin(a) * r * 0.4;
-      ctx.beginPath();
-      ctx.arc(dx, dy, r * 0.07, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(238,236,232,0.9)";
-      ctx.fill();
-    });
+    // protruding grip lever — a small metallic tab sticking out past the
+    // collar, like a manual advance/rewind lever, so the knob reads as a
+    // real turnable control rather than a flat disc
+    var leverAngle = -Math.PI / 2 - 0.25;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(leverAngle);
+    var leverW = r * 0.34, leverLen = r * 0.62, leverBase = r * 0.68;
+    roundRectPath(ctx, -leverW / 2, -(leverBase + leverLen), leverW, leverLen + leverW / 2, leverW / 2);
+    var leverGrad = ctx.createLinearGradient(-leverW / 2, 0, leverW / 2, 0);
+    leverGrad.addColorStop(0, "#c9c9c6");
+    leverGrad.addColorStop(0.5, "#efeeea");
+    leverGrad.addColorStop(1, "#9a9a96");
+    ctx.fillStyle = leverGrad;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.stroke();
+    ctx.restore();
+
+    // single index dot marking the lever's resting position (replaces the
+    // old pair of overlapping dots for a cleaner face)
+    var idx = x + Math.cos(leverAngle) * r * 0.4;
+    var idy = y + Math.sin(leverAngle) * r * 0.4;
+    ctx.beginPath();
+    ctx.arc(idx, idy, r * 0.08, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(238,236,232,0.95)";
+    ctx.fill();
+
+    // soft highlight on the cap for depth
     ctx.beginPath();
     ctx.ellipse(x - r * 0.16, y - r * 0.18, r * 0.09, r * 0.05, -0.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
     ctx.fill();
     ctx.restore();
   }
@@ -550,9 +575,13 @@
     ctx.stroke();
 
     // faint top hardware — strap lug (left) and geared advance dial with
-    // strap lug (right), both low-contrast like the reference photo
-    drawTopNub(ctx, bx + bw * 0.22, by - 1 * k, 22 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
-    drawGearedTopDial(ctx, bx + bw * 0.69, by - 2 * k, 42 * k, 8 * k, isDark);
+    // strap lug (right), both low-contrast like the reference photo.
+    // Pulled further above the top edge (by - 12*k instead of by - 1/2*k)
+    // so neither shape overlaps the body's border stroke, widened, and
+    // the right-hand dial moved further right and away from the button
+    // below it.
+    drawTopNub(ctx, bx + bw * 0.22, by - 12 * k, 34 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
+    drawGearedTopDial(ctx, bx + bw * 0.78, by - 12 * k, 60 * k, 8 * k, isDark);
 
     // shoulder plate — a neutral silver-grey top panel, independent of the
     // body shell color (matches the reference: the top plate reads as a
@@ -583,8 +612,8 @@
     ctx.fillText("POLAROID", bx + bw * 0.06, shY);
     ctx.restore();
     
-    // red logo dot 
-    drawLogoDot(ctx, bx + bw * 0.354, shY, bw * 0.038);
+    // red logo dot — moved left (closer to the wordmark) from 0.354 to 0.27
+    drawLogoDot(ctx, bx + bw * 0.27, shY, bw * 0.038);
 
     // grey sensor / viewfinder window
     var winW = bw * 0.11, winH = winW * 0.65; 

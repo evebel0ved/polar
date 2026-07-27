@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INSTANT PRINT LAB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4f3f0;
+  --panel:#ffffff;
+  --line:#dedbd4;
+  --line-soft:#eae8e2;
+  --ink:#26241f;
+  --ink-soft:#6b6862;
+  --stone:#9a968c;
+  --accent:#3a3834;
+  --danger:#a24632;
+  --radius:3px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  min-height:100vh;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'IBM Plex Sans KR','Space Grotesk',sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  letter-spacing:.14em;
+  color:var(--ink-soft);
+  text-transform:uppercase;
+}
+.app{
+  width:min(1320px,100%);
+  margin:0 auto;
+  padding:34px 22px 60px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 340px;
+  gap:26px;
+}
+header.masthead{
+  grid-column:1/-1;
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  border-bottom:1px solid var(--line);
+  padding-bottom:16px;
+  margin-bottom:6px;
+  gap:20px;
+  flex-wrap:wrap;
+}
+header.masthead h1{
+  margin:0;
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:700;
+  font-size:26px;
+  letter-spacing:.02em;
+}
+header.masthead .sub{
+  margin-top:4px;
+}
+.spec-strip{
+  display:flex;
+  gap:18px;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:var(--ink-soft);
+  flex-wrap:wrap;
+}
+.spec-strip span b{color:var(--ink);font-weight:600;}
+
+.stage-col{min-width:0;}
+.stage-frame{
+  border:1px solid var(--line);
+  background:var(--panel);
+  padding:16px 16px 0;
+}
+.canvas-shell{
+  position:relative;
+  width:100%;
+  background:#eceae4;
+  overflow:hidden;
+}
+#stage{
+  display:block;
+  width:100%;
+  height:auto;
+}
+.frame-edge{
+  height:20px;
+  background:#ffffff;
+  border-top:1px solid var(--line);
+}
+.stage-foot{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 2px 0;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:var(--ink-soft);
+}
+#statusText{margin:0;}
+.stage-actions{
+  display:flex;
+  gap:8px;
+  margin-top:14px;
+}
+
+button{
+  font-family:'IBM Plex Sans KR',sans-serif;
+  font-size:13px;
+  font-weight:600;
+  border:1px solid var(--accent);
+  background:var(--panel);
+  color:var(--accent);
+  padding:10px 14px;
+  cursor:pointer;
+  border-radius:var(--radius);
+  letter-spacing:.01em;
+}
+button:hover{background:#f0efec;}
+button:active{transform:translateY(1px);}
+button.primary{background:var(--accent);color:#fff;}
+button.primary:hover{background:#4a4740;}
+button:disabled{opacity:.45;cursor:wait;}
+button.block{width:100%;}
+button.ghost{border-color:var(--line);color:var(--ink-soft);background:transparent;}
+
+.panel{
+  border:1px solid var(--line);
+  background:var(--panel);
+  padding:20px;
+  height:fit-content;
+}
+.panel h2{
+  margin:0 0 3px;
+  font-family:'Space Grotesk',sans-serif;
+  font-size:15px;
+  letter-spacing:.02em;
+}
+.panel .lede{
+  margin:0 0 20px;
+  font-size:12px;
+  color:var(--ink-soft);
+  line-height:1.6;
+}
+.field-group{
+  margin-bottom:22px;
+}
+.field-group:last-child{margin-bottom:0;}
+.field-group > .eyebrow{display:block;margin-bottom:9px;}
+
+.upload-row{
+  display:flex;
+  gap:8px;
+}
+.upload-row input[type=file]{
+  position:absolute;
+  width:1px;height:1px;
+  opacity:0;pointer-events:none;
+}
+.upload-note{
+  margin:8px 0 0;
+  font-size:11px;
+  color:var(--stone);
+}
+
+.swatch-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+}
+.swatch{
+  aspect-ratio:1;
+  border:1px solid var(--line);
+  border-radius:2px;
+  cursor:pointer;
+  position:relative;
+  padding:0;
+}
+.swatch span{
+  position:absolute;
+  left:4px;bottom:3px;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:9px;
+  letter-spacing:.02em;
+  mix-blend-mode:difference;
+  color:#fff;
+}
+.swatch.is-active{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+
+.range-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.range-row input[type=range]{
+  flex:1;
+  accent-color:var(--accent);
+}
+.range-row .val{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:var(--ink-soft);
+  min-width:34px;
+  text-align:right;
+}
+label.check{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:12px;
+  color:var(--ink-soft);
+  margin-top:10px;
+}
+label.check input{accent-color:var(--accent);}
+
+.toggle-row{
+  display:flex;
+  gap:8px;
+}
+.toggle-btn{
+  flex:1;
+  padding:9px 8px;
+  font-size:12px;
+  font-weight:600;
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--ink-soft);
+  cursor:pointer;
+  border-radius:var(--radius);
+  letter-spacing:.01em;
+  text-align:center;
+}
+.toggle-btn:hover{background:#f0efec;}
+.toggle-btn.is-active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#fff;
+}
+
+.text-input{
+  width:100%;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--panel);
+  color:var(--ink);
+  font-family:'IBM Plex Sans KR',sans-serif;
+  font-size:13px;
+}
+.text-input:focus{
+  outline:none;
+  border-color:var(--accent);
+}
+
+.sub-block{margin-top:12px;}
+.sub-block:first-child{margin-top:0;}
+
+.divider{
+  border:0;
+  border-top:1px solid var(--line-soft);
+  margin:20px 0;
+}
+.download-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+
+@media (max-width:980px){
+  .app{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="masthead">
+    <div>
+      <span class="eyebrow">FILM · 01 &nbsp;/&nbsp; INSTANT CARD</span>
+      <h1>INSTANT PRINT LAB</h1>
+      <p class="sub eyebrow" style="text-transform:none;letter-spacing:0;">사진을 넣고, 카메라에서 갓 뽑아낸 즉석 사진 이미지를 만들어보세요.</p>
+    </div>
+    <div class="spec-strip">
+      <span>BODY <b id="specCamera">WHITE</b></span>
+      <span>BG <b id="specBg">PAPER</b></span>
+      <span>CUT <b id="specOrient">세로</b></span>
+      <span>OUT <b id="specScale">×6</b></span>
+      <span>FMT <b>PNG / GIF</b></span>
+    </div>
+  </header>
+
+  <section class="stage-col">
+    <div class="stage-frame">
+      <div class="canvas-shell">
+        <canvas id="stage" width="1400" height="1000"></canvas>
+      </div>
+      <div class="frame-edge"></div>
+    </div>
+    <div class="stage-foot">
+      <p id="statusText">사진을 업로드하면 미리보기가 갱신됩니다.</p>
+      <span id="phaseLabel">FRAME — STATIC</span>
+    </div>
+    <div class="stage-actions">
+      <button id="playPreview" type="button" class="ghost">▶ 배출 애니메이션 미리보기</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <h2>CONTROL SHEET</h2>
+    <p class="lede">모든 설정은 실시간으로 미리보기에 반영되고, 저장되는 파일도 미리보기와 동일한 구도로 출력됩니다.</p>
+
+    <div class="field-group">
+      <span class="eyebrow">01 · 사진 업로드</span>
+      <div class="upload-row">
+        <input id="photoInput" type="file" accept="image/*">
+        <button type="button" class="block" id="pickPhoto">사진 선택하기</button>
+      </div>
+      <p class="upload-note" id="photoStatus">선택된 사진 없음</p>
+    </div>
+
+    <div class="field-group">
+      <span class="eyebrow">02 · 카메라 컬러 (8)</span>
+      <div class="swatch-grid" id="cameraSwatchGrid"></div>
+    </div>
+
+    <div class="field-group">
+      <span class="eyebrow">03 · 배경</span>
+      <div class="toggle-row">
+        <button type="button" class="toggle-btn is-active" id="bgModeColor">컬러</button>
+        <button type="button" class="toggle-btn" id="bgModeBlur">사진 블러</button>
+      </div>
+      <div class="sub-block" id="bgColorBlock">
+        <div class="swatch-grid" id="bgSwatchGrid"></div>
+      </div>
+      <p class="upload-note" id="bgNote">배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.</p>
+    </div>
+
+    <div class="field-group">
+      <span class="eyebrow">04 · 출력 방향</span>
+      <div class="toggle-row">
+        <button type="button" class="toggle-btn is-active" id="orientVertical">세로</button>
+        <button type="button" class="toggle-btn" id="orientHorizontal">가로</button>
+      </div>
+      <p class="upload-note">가로 출력은 흰 여백이 사진 오른쪽에 놓여요.</p>
+    </div>
+
+    <div class="field-group">
+      <span class="eyebrow">05 · 출력 문구</span>
+      <input type="text" class="text-input" id="captionInput" maxlength="18" value="INSTANT" placeholder="예: INSTANT">
+      <p class="upload-note">폴라로이드 흰 여백에 들어가는 문구를 자유롭게 바꿀 수 있어요.</p>
+    </div>
+
+    <div class="field-group">
+      <span class="eyebrow">06 · 출력 해상도 배율</span>
+      <div class="range-row">
+        <input id="scaleRange" type="range" min="2" max="8" step="1" value="6">
+        <span class="val" id="scaleVal">×6</span>
+      </div>
+      <p class="upload-note">PNG는 이 배율로 저장돼요. 어떤 화면에서 열어도 동일한 구도·비율로 저장됩니다.</p>
+    </div>
+
+    <div class="field-group">
+      <span class="eyebrow">07 · GIF 배출 애니메이션</span>
+      <div class="range-row">
+        <input id="gifRange" type="range" min="0.8" max="3" step="0.1" value="1.4">
+        <span class="val" id="gifVal">1.4s</span>
+      </div>
+      <label class="check"><input id="gifLoop" type="checkbox" checked> 반복 재생(loop)</label>
+    </div>
+
+    <hr class="divider">
+
+    <div class="field-group">
+      <span class="eyebrow">08 · 저장</span>
+      <div class="download-grid">
+        <button id="downloadPng" type="button" class="block">PNG 저장</button>
+        <button id="downloadGif" type="button" class="primary block">GIF 저장</button>
+      </div>
+      <p class="upload-note">GIF 저장은 인터넷 연결 없이 로컬에서 인코딩됩니다. 이미지가 클수록 시간이 더 걸릴 수 있어요.</p>
+    </div>
+  </aside>
+</div>
+
+<script src="instant-print-lab.js"></script>
+</body>
+</html>

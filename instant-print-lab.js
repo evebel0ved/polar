@@ -703,6 +703,7 @@ for (let i = 0; i < 26; i++) {
     ctx.stroke();
 
 }
+    var knInner = R * 0.66;
     ctx.beginPath();
     ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
     ctx.strokeStyle = "rgba(255,255,255,0.1)";

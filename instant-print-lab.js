@@ -370,9 +370,9 @@
 
   function drawStatusLED(ctx, x, y, w, h) {
     ctx.save();
-    roundRectPath(ctx, x, y, w, h, w / 2);
+    roundRectPath(ctx, x, y, w, h, w * 0.35);
     var grad = ctx.createLinearGradient(x, y, x, y + h);
-    grad.addColorStop(0, "#e2685a");
+    grad.addColorStop(0, "#d85d4f");
     grad.addColorStop(0.5, "#b5382a");
     grad.addColorStop(1, "#7c2018");
     ctx.fillStyle = grad;
@@ -380,10 +380,6 @@
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0,0,0,0.3)";
     ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(x + w * 0.32, y + h * 0.22, w * 0.28, h * 0.14, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.fill();
     ctx.restore();
   }
 
@@ -511,18 +507,10 @@
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
-    g.addColorStop(0, "#e34432");
-    g.addColorStop(0.55, "#c1281c");
-    g.addColorStop(1, "#8c1912");
+    var g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+    g.addColorStop(0, "#d33a29");
+    g.addColorStop(1, "#a3211a");
     ctx.fillStyle = g;
-    ctx.fill();
-    ctx.lineWidth = r * 0.09;
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(x - r * 0.28, y - r * 0.32, r * 0.32, r * 0.16, -0.6, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.25)";
     ctx.fill();
     ctx.restore();
   }
@@ -721,10 +709,10 @@
     var gR = R * 0.54;
     ctx.beginPath();
     ctx.arc(cx, cy, gR, 0, Math.PI * 2);
-    var glassGrad = ctx.createRadialGradient(cx - gR * 0.3, cy - gR * 0.35, gR * 0.05, cx, cy, gR);
-    glassGrad.addColorStop(0, "#333a3f");
-    glassGrad.addColorStop(0.5, "#121517");
-    glassGrad.addColorStop(1, "#020202");
+    var glassGrad = ctx.createRadialGradient(cx, cy, gR * 0.05, cx, cy, gR);
+    glassGrad.addColorStop(0, "#26292c");
+    glassGrad.addColorStop(0.7, "#131516");
+    glassGrad.addColorStop(1, "#040404");
     ctx.fillStyle = glassGrad;
     ctx.fill();
 
@@ -732,42 +720,34 @@
     for (var gc = 1; gc <= 8; gc++) {
       ctx.beginPath();
       ctx.arc(cx, cy, gR * (gc / 9), 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.045)";
+      ctx.strokeStyle = "rgba(255,255,255,0.04)";
       ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // center pin, offset slightly like a real lens axis screw
+    // small centered pin (lens axis screw)
     ctx.beginPath();
-    ctx.arc(cx - gR * 0.06, cy + gR * 0.08, gR * 0.09, 0, Math.PI * 2);
-    var pinGrad = ctx.createRadialGradient(cx - gR * 0.1, cy + gR * 0.04, 1, cx - gR * 0.06, cy + gR * 0.08, gR * 0.09);
-    pinGrad.addColorStop(0, "#4a4f52");
+    ctx.arc(cx, cy, gR * 0.08, 0, Math.PI * 2);
+    var pinGrad = ctx.createRadialGradient(cx, cy, 1, cx, cy, gR * 0.08);
+    pinGrad.addColorStop(0, "#3d4144");
     pinGrad.addColorStop(1, "#0a0b0c");
     ctx.fillStyle = pinGrad;
     ctx.fill();
 
-    // broad photographic highlight sweep across the upper-left of the lens
+    // broad, soft highlight sweep across the upper-left of the whole lens —
+    // the only source of "shine", so the dome reads as flat matte glass
+    // rather than a glossy eye
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.clip();
     var sweep = ctx.createLinearGradient(cx - R, cy - R, cx + R * 0.2, cy + R * 0.2);
-    sweep.addColorStop(0, "rgba(255,255,255,0.22)");
-    sweep.addColorStop(0.35, "rgba(255,255,255,0.05)");
+    sweep.addColorStop(0, "rgba(255,255,255,0.16)");
+    sweep.addColorStop(0.3, "rgba(255,255,255,0.04)");
     sweep.addColorStop(0.5, "rgba(255,255,255,0)");
     ctx.fillStyle = sweep;
     ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
     ctx.restore();
-
-    // crisp specular highlights on the glass dome
-    ctx.beginPath();
-    ctx.ellipse(cx - gR * 0.32, cy - gR * 0.36, gR * 0.24, gR * 0.13, -0.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + gR * 0.3, cy + gR * 0.4, gR * 0.11, gR * 0.05, -0.4, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fill();
 
     ctx.restore();
   }

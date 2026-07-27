@@ -310,10 +310,40 @@
     var factor = clamp(blurRadius / 3, 6, 60);
     var smallW = Math.max(6, Math.round(destW / factor));
     var smallH = Math.max(6, Math.round(destH / factor));
+
+    // Shrink in repeated ~50% steps instead of one single huge jump (a
+    // multi-thousand-px photo straight down to ~20px in one drawImage
+    // call). A single very large downscale ratio is exactly where mobile
+    // GPU bilinear samplers tend to skip source pixels instead of
+    // averaging them, which is what produced hard/blocky broken pixels
+    // even with imageSmoothingEnabled on. Halving repeatedly keeps every
+    // individual step's ratio small (≤2x), which every device's sampler
+    // handles as a smooth average — the standard "mip-chain" downscale
+    // approach — so the end result is an actual soft blur everywhere.
+    var curW = crop.sw, curH = crop.sh;
+    var curCanvas = img, curSx = crop.sx, curSy = crop.sy;
+    while (curW > smallW * 2 || curH > smallH * 2) {
+      var nextW = Math.max(smallW, Math.round(curW / 2));
+      var nextH = Math.max(smallH, Math.round(curH / 2));
+      var stepCanvas = document.createElement("canvas");
+      stepCanvas.width = nextW; stepCanvas.height = nextH;
+      var stepCtx = stepCanvas.getContext("2d");
+      stepCtx.imageSmoothingEnabled = true;
+      if ("imageSmoothingQuality" in stepCtx) stepCtx.imageSmoothingQuality = "high";
+      stepCtx.drawImage(curCanvas, curSx, curSy, curW, curH, 0, 0, nextW, nextH);
+      curCanvas = stepCanvas; curSx = 0; curSy = 0; curW = nextW; curH = nextH;
+    }
+
     var small = document.createElement("canvas");
     small.width = smallW; small.height = smallH;
     var sctx = small.getContext("2d");
-    sctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, smallW, smallH);
+    // Smoothing must be turned on for every draw in this chain, including
+    // the final upscale back onto `ctx` below. Several mobile browsers/
+    // WebViews create new canvases with imageSmoothingEnabled effectively
+    // off (or fall back to nearest-neighbor) unless it's set explicitly.
+    sctx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in sctx) sctx.imageSmoothingQuality = "high";
+    sctx.drawImage(curCanvas, curSx, curSy, curW, curH, 0, 0, smallW, smallH);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";

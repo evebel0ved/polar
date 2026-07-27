@@ -4,7 +4,11 @@
   // ---------------------------------------------------------------------
   // Constants & state
   // ---------------------------------------------------------------------
-  var W = 1400, H = 1000;
+  // W is fixed; H now depends on orientation (see applyOrientationDims) —
+  // vertical exports/preview use a square canvas, horizontal uses a
+  // shorter canvas (less empty space above/below). Both get corrected
+  // by applyOrientationDims() before the very first render.
+  var W = 1400, H = 800;
 
   var CAMERA_COLORS = [
     { id: "white",    label: "WHITE",    body: "#f6f5f2" },
@@ -42,9 +46,12 @@
     cameraColorIndex: 0,
     bgColorIndex: 0,
     bgMode: "color",           // "color" | "blur"
-    orientation: "vertical",   // "vertical" | "horizontal"
+    orientation: "horizontal", // "vertical" | "horizontal" — horizontal is now default
     captionText: "INSTANT",
+    serialText: "N° 01",       // customizable frame-number label printed on the card margin
     photoImg: null,
+    photoImg2: null,           // 2nd photo — only used for GIF/video (stacks on top of photo 1)
+    photoImg3: null,           // 3rd photo — only used for GIF/video (stacks on top of photo 2)
     scale: 6,
     gifSeconds: 1.4,
     gifLoop: true,
@@ -66,6 +73,13 @@
   var photoInput = document.getElementById("photoInput");
   var pickPhotoBtn = document.getElementById("pickPhoto");
   var photoStatus = document.getElementById("photoStatus");
+  var photoInput2 = document.getElementById("photoInput2");
+  var pickPhoto2Btn = document.getElementById("pickPhoto2");
+  var photoStatus2 = document.getElementById("photoStatus2");
+  var photoInput3 = document.getElementById("photoInput3");
+  var pickPhoto3Btn = document.getElementById("pickPhoto3");
+  var photoStatus3 = document.getElementById("photoStatus3");
+  var serialInput = document.getElementById("serialInput");
   var cameraSwatchGrid = document.getElementById("cameraSwatchGrid");
   var bgSwatchGrid = document.getElementById("bgSwatchGrid");
   var bgColorBlock = document.getElementById("bgColorBlock");
@@ -149,37 +163,11 @@
   }
 
   // ---------------------------------------------------------------------
-  // Scene layout (logical 1400x1000 coordinate space — fixed regardless
-  // of device, so preview and every exported file share one composition)
-  //
-  // bodyX/bodyY were shifted (+40 / -9 from the original 140/250) so the
-  // camera + ejected polaroid group sits centered in the 1400x1000 frame
-  // for the default (vertical) orientation.
+  // Scene layout (logical W×H coordinate space — fixed per orientation
+  // regardless of device, so preview and every exported file share one
+  // composition). W is always 1400; H is 800 for horizontal or 1400
+  // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
-  var LAYOUT_HORIZONTAL = {
-    bodyX: 180, bodyY: 241, bodyW: 620, bodyH: 424, bodyR: 36,
-    shoulderH: 94
-  };
-
-  // vertical (portrait) layout — camera sits centered near the TOP of the
-  // frame, enlarged (same 620:424 body ratio, so every hardware element
-  // positioned/sized off bw/bh/k inside drawCamera scales automatically),
-  // leaving just enough room below for the card to eject straight down
-  // without spilling past the canvas edge.
-  var VERTICAL_SCALE = 580 / 620;
-  var LAYOUT_VERTICAL = {
-    bodyX: (W - 620 * VERTICAL_SCALE) / 2,
-    bodyY: 46,
-    bodyW: 620 * VERTICAL_SCALE,
-    bodyH: 424 * VERTICAL_SCALE,
-    bodyR: 36 * VERTICAL_SCALE,
-    shoulderH: 94 * VERTICAL_SCALE
-  };
-
-  function getLayout(orientation) {
-    return orientation === "vertical" ? LAYOUT_VERTICAL : LAYOUT_HORIZONTAL;
-  }
-
   var CARD_DIMS = {
     // vertical card is narrower than the (now bigger) camera body so the
     // ejected photo stays visually contained within the camera's footprint
@@ -191,8 +179,57 @@
     horizontal: { w: 480, h: 324, side: "right",  margin: 92 }
   };
 
+  // horizontal (landscape) layout — card ejects sideways from under the
+  // camera's right edge, so the canvas only needs to be tall enough for
+  // the camera body itself. Recomputed off the current H so the reduced
+  // (non-square) horizontal canvas still keeps the camera vertically
+  // centered instead of assuming a fixed 1000px-tall canvas.
+  function computeHorizontalLayout() {
+    var bodyW = 620, bodyH = 424, bodyR = 36, shoulderH = 94;
+    var bodyY = Math.max(24, Math.round((H - bodyH) / 2) - 18);
+    return { bodyX: 180, bodyY: bodyY, bodyW: bodyW, bodyH: bodyH, bodyR: bodyR, shoulderH: shoulderH };
+  }
+
+  // vertical (portrait) layout — camera sits near the top, card ejects
+  // straight down. Enlarged (same 620:424 body ratio, so every hardware
+  // element positioned/sized off bw/bh/k inside drawCamera scales
+  // automatically). With the canvas now square, the whole camera+card
+  // group is vertically centered in the available height rather than
+  // pinned near the top, so the extra square space reads as intentional
+  // framing instead of empty padding.
+  function computeVerticalLayout() {
+    var VERTICAL_SCALE = 580 / 620;
+    var bodyW = 620 * VERTICAL_SCALE, bodyH = 424 * VERTICAL_SCALE,
+        bodyR = 36 * VERTICAL_SCALE, shoulderH = 94 * VERTICAL_SCALE;
+    var cardH = CARD_DIMS.vertical.h;
+    var totalContentH = bodyH + cardH;
+    var bodyY = Math.max(30, Math.round((H - totalContentH) / 2));
+    return {
+      bodyX: (W - bodyW) / 2,
+      bodyY: bodyY,
+      bodyW: bodyW, bodyH: bodyH, bodyR: bodyR, shoulderH: shoulderH
+    };
+  }
+
+  function getLayout(orientation) {
+    return orientation === "vertical" ? computeVerticalLayout() : computeHorizontalLayout();
+  }
+
+  // Sets W/H for the chosen orientation and resizes the actual <canvas>
+  // element to match, so the preview's intrinsic aspect ratio (and every
+  // export, which reads W/H at save time) always matches what's selected.
+  function applyOrientationDims(orientation) {
+    if (orientation === "vertical") {
+      W = 1400; H = 1400; // square canvas
+    } else {
+      W = 1400; H = 800;  // shorter canvas — less empty space above/below
+    }
+    stage.width = W;
+    stage.height = H;
+  }
+
   function cameraCenter(L) {
-    L = L || LAYOUT_HORIZONTAL;
+    L = L || computeHorizontalLayout();
     return {
       cx: L.bodyX + L.bodyW / 2,
       cy: L.bodyY + L.shoulderH + (L.bodyH - L.shoulderH) / 2
@@ -624,7 +661,7 @@
   }
   
   function drawCamera(ctx, colorDef, L) {
-    L = L || LAYOUT_HORIZONTAL;
+    L = L || computeHorizontalLayout();
     var body = colorDef.body;
     var isDark = isDarkColor(body);
     var bw = L.bodyW, bh = L.bodyH, bx = L.bodyX, by = L.bodyY;
@@ -828,8 +865,9 @@ ctx.fill();
   // ---------------------------------------------------------------------
   // Polaroid card (orientation aware)
   // ---------------------------------------------------------------------
-  function drawPhotoCard(ctx, e, photoImg, orientation, captionText, L) {
-    L = L || LAYOUT_HORIZONTAL;
+  function drawPhotoCard(ctx, e, photoImg, orientation, captionText, serialText, L, stack) {
+    L = L || computeHorizontalLayout();
+    stack = stack || { x: 0, y: 0, rot: 0 };
     var dims = CARD_DIMS[orientation] || CARD_DIMS.vertical;
     var left, top;
     if (orientation === "vertical") {
@@ -842,8 +880,22 @@ ctx.fill();
       left = cardLeftAt(e, dims.w, L);
       top = c.cy - dims.h / 2;
     }
-    var caption = (captionText || "").trim() || "INSTANT";
+    // stacked photos (2nd/3rd) settle slightly offset & rotated from the
+    // first, like a scattered pile of instant prints, instead of sitting
+    // in an identical spot on top of one another
+    left += stack.x || 0;
+    top += stack.y || 0;
 
+    var caption = (captionText || "").trim() || "INSTANT";
+    var serial = (serialText || "").trim() || "N° 01";
+
+    ctx.save();
+    if (stack.rot) {
+      var rcx = left + dims.w / 2, rcy = top + dims.h / 2;
+      ctx.translate(rcx, rcy);
+      ctx.rotate(stack.rot * Math.PI / 180);
+      ctx.translate(-rcx, -rcy);
+    }
     ctx.save();
     ctx.shadowColor = "rgba(20,16,10,0.30)";
     ctx.shadowBlur = 32;
@@ -910,7 +962,7 @@ ctx.fill();
       ctx.fillStyle = "#9a968c";
       ctx.font = "500 13px 'IBM Plex Mono', monospace";
       ctx.textAlign = "center";
-      ctx.fillText("N° 01", mCenterX, top + 34);
+      ctx.fillText(serial, mCenterX, top + 34);
 
       ctx.save();
       ctx.translate(mCenterX, top + dims.h - 26);
@@ -924,26 +976,84 @@ ctx.fill();
       ctx.fillStyle = "#9a968c";
       ctx.font = "500 13px 'IBM Plex Mono', monospace";
       ctx.textAlign = "left";
-      ctx.fillText("N° 01", left + pad, top + dims.h - dims.margin + 40);
+      ctx.fillText(serial, left + pad, top + dims.h - dims.margin + 40);
       ctx.textAlign = "right";
       ctx.font = "600 15px 'Space Grotesk', sans-serif";
       ctx.fillStyle = "#5b5850";
       ctx.fillText(caption, left + dims.w - pad, top + dims.h - dims.margin + 40);
     }
+
+    ctx.restore(); // closes the outer stack-rotation save opened above
   }
 
   // ---------------------------------------------------------------------
   // Scene render
   // ---------------------------------------------------------------------
+  // Splits a single 0..1 phase into (segment index, local eject progress)
+  // across N photo segments. Each segment gets an equal share of the
+  // phase range; within a segment the first 70% is the eject slide
+  // (eased) and the remaining 30% is a hold, so multiple photos don't
+  // eject back-to-back with no pause between them.
+  function resolveTimelinePosition(phase, segCount) {
+    var p = clamp(phase, 0, 1);
+    if (segCount <= 1) {
+      return { idx: 0, localE: easeOutCubic(p) };
+    }
+    var slideFrac = 0.7;
+    var segFloat = p * segCount;
+    var idx = Math.min(segCount - 1, Math.floor(segFloat));
+    var local = segFloat - idx;
+    if (p >= 1) { idx = segCount - 1; local = 1; }
+    var localE = easeOutCubic(clamp(local / slideFrac, 0, 1));
+    return { idx: idx, localE: localE };
+  }
+
+  // Stacked (2nd/3rd) photos settle slightly offset & rotated from the
+  // first, like a scattered pile of instant prints landing on top of
+  // one another, instead of sitting in an identical spot.
+  function stackOffsetFor(i) {
+    if (i === 0) return { x: 0, y: 0, rot: 0 };
+    var dir = i % 2 === 1 ? 1 : -1;
+    return { x: dir * (10 + i * 4), y: i * 8, rot: dir * (3 + i * 1.5) };
+  }
+
+  // If the label ends in digits (like the default "N° 01"), each stacked
+  // card auto-increments that trailing number; otherwise every card
+  // just repeats the same custom text as-is.
+  function serialForIndex(text, i) {
+    var base = (text || "").trim() || "N° 01";
+    if (i === 0) return base;
+    var m = /^(.*?)(\d+)(\D*)$/.exec(base);
+    if (!m) return base;
+    var num = parseInt(m[2], 10) + i;
+    var padded = String(num).length < m[2].length
+      ? ("0000000000" + num).slice(-m[2].length)
+      : String(num);
+    return m[1] + padded + m[3];
+  }
+
   function renderScene(ctx, phase, st) {
     var L = getLayout(st.orientation);
     var cameraColorDef = CAMERA_COLORS[st.cameraColorIndex];
     var bgColorDef = BG_COLORS[st.bgColorIndex];
     drawBackground(ctx, bgColorDef, st.bgMode, st.photoImg);
-    var e = easeOutCubic(clamp(phase, 0, 1));
-    // card drawn first, camera drawn on top — the part of the card still
-    // "inside" the body gets covered by the camera, giving the eject effect
-    drawPhotoCard(ctx, e, st.photoImg, st.orientation, st.captionText, L);
+
+    // 2nd/3rd photos only ever take part here — PNG export always calls
+    // this with a state clone that has photoImg2/3 cleared, so a plain
+    // still export never shows a stack, per spec.
+    var photos = [st.photoImg];
+    if (st.photoImg2) photos.push(st.photoImg2);
+    if (st.photoImg3) photos.push(st.photoImg3);
+    var pos = resolveTimelinePosition(phase, photos.length);
+
+    // cards drawn first (in stacking order), camera drawn on top — the
+    // part of each card still "inside" the body gets covered by the
+    // camera, giving the eject effect
+    for (var i = 0; i <= pos.idx; i++) {
+      var e = (i < pos.idx) ? 1 : pos.localE;
+      drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
+        serialForIndex(st.serialText, i), L, stackOffsetFor(i));
+    }
     drawCamera(ctx, cameraColorDef, L);
   }
 
@@ -1009,17 +1119,29 @@ ctx.fill();
     state.orientation = orientation;
     orientVerticalBtn.classList.toggle("is-active", orientation === "vertical");
     orientHorizontalBtn.classList.toggle("is-active", orientation === "horizontal");
+    applyOrientationDims(orientation);
     render();
   }
 
-  function handlePhotoFile(file) {
+  // slot 1 = state.photoImg (used everywhere), slot 2/3 = state.photoImg2/3
+  // (only ever drawn during GIF/video export & preview, stacked on top of
+  // slot 1 — PNG export always ignores them)
+  function handlePhotoFile(file, slot) {
     if (!file || !file.type.match(/^image\//)) return;
     var reader = new FileReader();
     reader.onload = function (e) {
       var img = new Image();
       img.onload = function () {
-        state.photoImg = img;
-        photoStatus.textContent = file.name + " 적용됨";
+        if (slot === 2) {
+          state.photoImg2 = img;
+          photoStatus2.textContent = file.name + " 적용됨";
+        } else if (slot === 3) {
+          state.photoImg3 = img;
+          photoStatus3.textContent = file.name + " 적용됨";
+        } else {
+          state.photoImg = img;
+          photoStatus.textContent = file.name + " 적용됨";
+        }
         statusText.textContent = "사진이 적용되었어요. 컬러와 배율을 조정해보세요.";
         render();
       };
@@ -1030,8 +1152,24 @@ ctx.fill();
 
   pickPhotoBtn.addEventListener("click", function () { photoInput.click(); });
   photoInput.addEventListener("change", function (e) {
-    if (e.target.files && e.target.files[0]) handlePhotoFile(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) handlePhotoFile(e.target.files[0], 1);
   });
+
+  if (pickPhoto2Btn) pickPhoto2Btn.addEventListener("click", function () { photoInput2.click(); });
+  if (photoInput2) photoInput2.addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) handlePhotoFile(e.target.files[0], 2);
+  });
+  if (pickPhoto3Btn) pickPhoto3Btn.addEventListener("click", function () { photoInput3.click(); });
+  if (photoInput3) photoInput3.addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) handlePhotoFile(e.target.files[0], 3);
+  });
+
+  if (serialInput) {
+    serialInput.addEventListener("input", function () {
+      state.serialText = serialInput.value;
+      render();
+    });
+  }
 
   bgModeColorBtn.addEventListener("click", function () { setBgMode("color"); });
   bgModeBlurBtn.addEventListener("click", function () { setBgMode("blur"); });
@@ -1112,7 +1250,10 @@ ctx.fill();
       off.height = H * scale;
       var octx = off.getContext("2d");
       octx.scale(scale, scale);
-      renderScene(octx, 1, state);
+      // PNG only ever shows the first photo — the 2nd/3rd stack is a
+      // GIF/video-only feature
+      var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
+      renderScene(octx, 1, pngState);
       off.toBlob(function (blob) {
         downloadBlob(blob, "instant-print-card.png");
         statusText.textContent = "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
@@ -1447,6 +1588,7 @@ ctx.fill();
     downloadGifBtn.disabled = false;
     downloadPngBtn.disabled = false;
     playPreviewBtn.disabled = false;
+    if (typeof downloadVideoBtn !== "undefined" && downloadVideoBtn) downloadVideoBtn.disabled = false;
     state.phase = 1;
     render();
   }
@@ -1455,6 +1597,7 @@ ctx.fill();
     downloadGifBtn.disabled = true;
     downloadPngBtn.disabled = true;
     playPreviewBtn.disabled = true;
+    if (typeof downloadVideoBtn !== "undefined" && downloadVideoBtn) downloadVideoBtn.disabled = true;
     statusText.textContent = "GIF 프레임 렌더링 중…";
 
     setTimeout(function () {
@@ -1466,12 +1609,20 @@ ctx.fill();
         var octx = off.getContext("2d");
         octx.scale(gifScale, gifScale);
 
-        var slideSteps = 16, holdSteps = 6;
+        // more photos in the stack means more frames overall, so trim the
+        // per-segment step count a bit past 1 photo to keep total frame
+        // count (and encode time/file size) reasonable
+        var photoCount = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
+        var slideSteps = photoCount > 1 ? 10 : 16;
+        var holdSteps = photoCount > 1 ? 3 : 6;
+        var stepsPerSeg = slideSteps + holdSteps;
+        var totalSteps = stepsPerSeg * photoCount;
         var totalMs = state.gifSeconds * 1000;
-        var perFrameMs = totalMs / (slideSteps + holdSteps);
+        var perFrameMs = totalMs / totalSteps;
         var phases = [];
-        for (var s = 0; s <= slideSteps; s++) phases.push(s / slideSteps);
-        for (var h = 0; h < holdSteps; h++) phases.push(1);
+        for (var s = 0; s <= totalSteps; s++) phases.push(s / totalSteps);
+        // brief extra hold on the final resting shot
+        for (var h = 0; h < (photoCount > 1 ? 8 : 6); h++) phases.push(1);
 
         var rawFrames = [];
         phases.forEach(function (ph) {
@@ -1495,7 +1646,14 @@ ctx.fill();
                   // without the frame-to-frame shimmer error-diffusion
                   // dithering caused on this animation
                   return {
-                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 20),
+                    // strength lowered from 20 to 9: the old value shifted
+                    // pixels enough to read as a fixed dot/grain pattern
+                    // once a phone downsamples the image to fit the
+                    // screen (it only disappeared when zoomed in to 100%,
+                    // which is exactly what "aliased dither pattern" looks
+                    // like). This still breaks flat-color/gradient banding
+                    // without being visible at normal viewing sizes.
+                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 9),
                     delay: perFrameMs
                   };
                 });
@@ -1569,7 +1727,17 @@ ctx.fill();
         renderScene(octx, 0, state);
 
         var fps = 30;
-        var stream = off.captureStream(fps);
+        var stream, track = null, manualFrames = false;
+        try {
+          stream = off.captureStream(0);
+          track = stream.getVideoTracks && stream.getVideoTracks()[0];
+          manualFrames = !!(track && typeof track.requestFrame === "function");
+        } catch (probeErr) {
+          manualFrames = false;
+        }
+        if (!manualFrames) {
+          stream = off.captureStream(fps);
+        }
         var mimeCandidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
         var mimeType = "";
         for (var m = 0; m < mimeCandidates.length; m++) {
@@ -1600,7 +1768,8 @@ ctx.fill();
           resetVideoButtons();
         };
 
-        var holdMs = 900;
+        var photoCountForHold = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
+        var holdMs = photoCountForHold > 1 ? 1200 : 900;
         var animMs = state.gifSeconds * 1000;
         var start = null;
         recorder.start();
@@ -1611,10 +1780,12 @@ ctx.fill();
           var elapsed = now - start;
           var t = clamp(elapsed / animMs, 0, 1);
           renderScene(octx, t, state);
+          if (manualFrames) track.requestFrame();
           if (elapsed < animMs + holdMs) {
             requestAnimationFrame(tick);
           } else {
             renderScene(octx, 1, state);
+            if (manualFrames) track.requestFrame();
             setTimeout(function () { recorder.stop(); }, 60);
           }
         }
@@ -1629,6 +1800,7 @@ ctx.fill();
   // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------
+  applyOrientationDims(state.orientation);
   buildSwatches();
   render();
 })();

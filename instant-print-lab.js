@@ -156,10 +156,28 @@
   // camera + ejected polaroid group sits centered in the 1400x1000 frame
   // for the default (vertical) orientation.
   // ---------------------------------------------------------------------
-  var LAYOUT = {
+  var LAYOUT_HORIZONTAL = {
     bodyX: 180, bodyY: 241, bodyW: 620, bodyH: 424, bodyR: 36,
     shoulderH: 94
   };
+
+  // vertical (portrait) layout — camera sits centered near the TOP of the
+  // frame, scaled down proportionally (same 620:424 body ratio, so every
+  // hardware element positioned/sized off bw/bh/k inside drawCamera scales
+  // automatically), leaving room below for the card to eject straight down.
+  var VERTICAL_SCALE = 430 / 620;
+  var LAYOUT_VERTICAL = {
+    bodyX: (W - 620 * VERTICAL_SCALE) / 2,
+    bodyY: 64,
+    bodyW: 620 * VERTICAL_SCALE,
+    bodyH: 424 * VERTICAL_SCALE,
+    bodyR: 36 * VERTICAL_SCALE,
+    shoulderH: 94 * VERTICAL_SCALE
+  };
+
+  function getLayout(orientation) {
+    return orientation === "vertical" ? LAYOUT_VERTICAL : LAYOUT_HORIZONTAL;
+  }
 
   var CARD_DIMS = {
     vertical:   { w: 480, h: 580, side: "bottom", margin: 108 },
@@ -169,18 +187,30 @@
     horizontal: { w: 480, h: 324, side: "right",  margin: 92 }
   };
 
-  function cameraCenter() {
+  function cameraCenter(L) {
+    L = L || LAYOUT_HORIZONTAL;
     return {
-      cx: LAYOUT.bodyX + LAYOUT.bodyW / 2,
-      cy: LAYOUT.bodyY + LAYOUT.shoulderH + (LAYOUT.bodyH - LAYOUT.shoulderH) / 2
+      cx: L.bodyX + L.bodyW / 2,
+      cy: L.bodyY + L.shoulderH + (L.bodyH - L.shoulderH) / 2
     };
   }
 
-  function cardLeftAt(e, cardW) {
-    var rightEdge = LAYOUT.bodyX + LAYOUT.bodyW;
+  // horizontal orientation: card slides out sideways from under the
+  // camera body's right edge
+  function cardLeftAt(e, cardW, L) {
+    var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
     var endX = rightEdge - 60;
     return lerp(startX, endX, e);
+  }
+
+  // vertical orientation: card ejects straight down — starting mostly
+  // tucked under the camera body and sliding down to rest below it
+  function cardTopAt(e, cardH, L) {
+    var bodyBottom = L.bodyY + L.bodyH;
+    var startY = bodyBottom - cardH + 56;
+    var endY = bodyBottom + 44;
+    return lerp(startY, endY, e);
   }
 
   // ---------------------------------------------------------------------
@@ -188,27 +218,30 @@
   // ---------------------------------------------------------------------
   function drawColorBackground(ctx, colorDef) {
     var isDark = isDarkColor(colorDef.body);
-    var edge = isDark ? shade(colorDef.body, -35) : "#ffffff";
+    // light backgrounds are pre-lightened before building the gradient;
+    // already-dark colors (charcoal/ink/slate/…) are left exactly as-is
+    var base = isDark ? colorDef.body : shade(colorDef.body, 38);
+    var edge = isDark ? shade(colorDef.body, -35) : shade(base, -6);
     var g = ctx.createRadialGradient(W * 0.32, H * 0.28, 60, W * 0.5, H * 0.55, W * 0.8);
-    g.addColorStop(0, isDark ? shade(colorDef.body, 12) : shade(colorDef.body, 55));
-    g.addColorStop(0.55, isDark ? colorDef.body : shade(colorDef.body, 22));
+    g.addColorStop(0, isDark ? shade(colorDef.body, 12) : shade(base, 20));
+    g.addColorStop(0.55, isDark ? colorDef.body : base);
     g.addColorStop(1, edge);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
     var vg = ctx.createLinearGradient(0, 0, 0, H);
     vg.addColorStop(0, "rgba(0,0,0,0)");
-    vg.addColorStop(1, isDark ? "rgba(0,0,0,0.18)" : "rgba(60,50,40,0.05)");
+    vg.addColorStop(1, isDark ? "rgba(0,0,0,0.18)" : "rgba(60,50,40,0.035)");
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, W, H);
   }
 
   function drawBlurredPhotoBackground(ctx, photoImg) {
     var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, W, H);
-    var pad = 80;
+    var pad = 160;
     ctx.save();
     try {
-      ctx.filter = "blur(42px) saturate(1.06) brightness(0.94)";
+      ctx.filter = "blur(90px) saturate(1.08) brightness(0.94)";
       ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
     } catch (err) {
       // filter unsupported — fall back to a plain (unblurred) cover fill
@@ -545,8 +578,8 @@
     ctx.restore();
   }
   
-  function drawCamera(ctx, colorDef) {
-    var L = LAYOUT;
+  function drawCamera(ctx, colorDef, L) {
+    L = L || LAYOUT_HORIZONTAL;
     var body = colorDef.body;
     var isDark = isDarkColor(body);
     var bw = L.bodyW, bh = L.bodyH, bx = L.bodyX, by = L.bodyY;
@@ -629,15 +662,15 @@
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);
 
     // bottom-left toggle knob
-    var c = cameraCenter();
+    var c = cameraCenter(L);
     drawToggleKnob(ctx, bx + bw * 0.11, by + bh * 0.84, bw * 0.054, body, isDark);
 
-    // 바디 하이라이트 
+    // 바디 하이라이트 (상단에 위치 — 빛이 위에서 들어오는 느낌)
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(bx + 2, by + bh * 0.35);
-    ctx.lineTo(bx + bw * 0.45, by + bh - 2);
-    ctx.lineTo(bx + 2, by + bh - 2); 
+    ctx.moveTo(bx + 2, by + bh * 0.65);
+    ctx.lineTo(bx + bw * 0.45, by + 2);
+    ctx.lineTo(bx + 2, by + 2);
     ctx.closePath();
     ctx.fillStyle = "rgba(255, 255, 255, 0.25)"; 
     ctx.fill();
@@ -743,11 +776,20 @@ ctx.fill();
   // ---------------------------------------------------------------------
   // Polaroid card (orientation aware)
   // ---------------------------------------------------------------------
-  function drawPhotoCard(ctx, e, photoImg, orientation, captionText) {
+  function drawPhotoCard(ctx, e, photoImg, orientation, captionText, L) {
+    L = L || LAYOUT_HORIZONTAL;
     var dims = CARD_DIMS[orientation] || CARD_DIMS.vertical;
-    var c = cameraCenter();
-    var left = cardLeftAt(e, dims.w);
-    var top = c.cy - dims.h / 2;
+    var left, top;
+    if (orientation === "vertical") {
+      // camera sits at the top of the frame; card ejects straight down,
+      // centered under it
+      left = (W - dims.w) / 2;
+      top = cardTopAt(e, dims.h, L);
+    } else {
+      var c = cameraCenter(L);
+      left = cardLeftAt(e, dims.w, L);
+      top = c.cy - dims.h / 2;
+    }
     var caption = (captionText || "").trim() || "INSTANT";
 
     ctx.save();
@@ -842,12 +884,15 @@ ctx.fill();
   // Scene render
   // ---------------------------------------------------------------------
   function renderScene(ctx, phase, st) {
+    var L = getLayout(st.orientation);
     var cameraColorDef = CAMERA_COLORS[st.cameraColorIndex];
     var bgColorDef = BG_COLORS[st.bgColorIndex];
     drawBackground(ctx, bgColorDef, st.bgMode, st.photoImg);
     var e = easeOutCubic(clamp(phase, 0, 1));
-    drawPhotoCard(ctx, e, st.photoImg, st.orientation, st.captionText);
-    drawCamera(ctx, cameraColorDef);
+    // card drawn first, camera drawn on top — the part of the card still
+    // "inside" the body gets covered by the camera, giving the eject effect
+    drawPhotoCard(ctx, e, st.photoImg, st.orientation, st.captionText, L);
+    drawCamera(ctx, cameraColorDef, L);
   }
 
   function render() {
@@ -1027,11 +1072,18 @@ ctx.fill();
   // ---------------------------------------------------------------------
   // GIF export — median-cut palette + LZW encoder (no external libraries)
   // ---------------------------------------------------------------------
-  function buildPaletteFromImageData(data, maxColors) {
+  // Pools color samples across every frame (not just the final still frame)
+  // so the single global palette actually represents the whole animation —
+  // this alone removes most of the visible color-shift/banding between
+  // frames that made saved GIFs look broken.
+  function buildPaletteFromFrames(dataArrays, maxColors) {
     var samples = [];
-    for (var i = 0; i < data.length; i += 4 * 5) {
-      samples.push([data[i], data[i + 1], data[i + 2]]);
-    }
+    var strideEach = Math.max(4 * 6, Math.floor((4 * 5 * dataArrays.length) / 3));
+    dataArrays.forEach(function (data) {
+      for (var i = 0; i < data.length; i += strideEach) {
+        samples.push([data[i], data[i + 1], data[i + 2]]);
+      }
+    });
     var boxes = [samples];
 
     function channelRange(pixels) {
@@ -1096,17 +1148,79 @@ ctx.fill();
     return out;
   }
 
-  // --- byte writer -------------------------------------------------------
-  function ByteWriter() { this.bytes = []; }
-  ByteWriter.prototype.writeByte = function (b) { this.bytes.push(b & 0xff); };
+  // Floyd–Steinberg dithering: diffuses each pixel's quantization error to
+  // its neighbors, which turns hard color bands (very visible on this app's
+  // smooth gradient backgrounds) into fine, unnoticeable noise instead —
+  // the single biggest lever for perceived GIF quality with a 256-color
+  // palette.
+  function imageDataToIndicesDithered(data, w, h, palette, nearestIndexFn) {
+    var out = new Uint8Array(w * h);
+    var buf = new Float32Array(w * h * 3);
+    for (var i = 0, j = 0; i < data.length; i += 4, j += 3) {
+      buf[j] = data[i]; buf[j + 1] = data[i + 1]; buf[j + 2] = data[i + 2];
+    }
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var p = (y * w + x) * 3;
+        var r = clamp(buf[p], 0, 255), g = clamp(buf[p + 1], 0, 255), b = clamp(buf[p + 2], 0, 255);
+        var pi = nearestIndexFn(Math.round(r), Math.round(g), Math.round(b));
+        out[y * w + x] = pi;
+        var pc = palette[pi];
+        var er = r - pc[0], eg = g - pc[1], eb = b - pc[2];
+        if (x + 1 < w) {
+          var p1 = p + 3;
+          buf[p1] += er * (7 / 16); buf[p1 + 1] += eg * (7 / 16); buf[p1 + 2] += eb * (7 / 16);
+        }
+        if (y + 1 < h) {
+          if (x > 0) {
+            var p2 = p + w * 3 - 3;
+            buf[p2] += er * (3 / 16); buf[p2 + 1] += eg * (3 / 16); buf[p2 + 2] += eb * (3 / 16);
+          }
+          var p3 = p + w * 3;
+          buf[p3] += er * (5 / 16); buf[p3 + 1] += eg * (5 / 16); buf[p3 + 2] += eb * (5 / 16);
+          if (x + 1 < w) {
+            var p4 = p + w * 3 + 3;
+            buf[p4] += er * (1 / 16); buf[p4 + 1] += eg * (1 / 16); buf[p4 + 2] += eb * (1 / 16);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  // --- byte writer ---------------------------------------------------------
+  // Growable Uint8Array-backed buffer instead of a plain JS array with
+  // .push(). A hand-rolled GIF of several megapixels × many frames can
+  // produce tens of millions of bytes; pushing that many numbers onto a
+  // plain array is slow and memory-heavy enough to crash the tab (this is
+  // the page-error-after-saving bug). Doubling a typed array is both much
+  // faster and much lighter on memory.
+  function ByteWriter() {
+    this.buf = new Uint8Array(1 << 16);
+    this.len = 0;
+  }
+  ByteWriter.prototype._ensure = function (extra) {
+    if (this.len + extra <= this.buf.length) return;
+    var cap = this.buf.length;
+    while (cap < this.len + extra) cap *= 2;
+    var next = new Uint8Array(cap);
+    next.set(this.buf.subarray(0, this.len));
+    this.buf = next;
+  };
+  ByteWriter.prototype.writeByte = function (b) {
+    this._ensure(1);
+    this.buf[this.len++] = b & 0xff;
+  };
   ByteWriter.prototype.writeBytes = function (arr, offset, length) {
     offset = offset || 0; length = length === undefined ? arr.length : length;
-    for (var i = 0; i < length; i++) this.bytes.push(arr[offset + i] & 0xff);
+    this._ensure(length);
+    for (var i = 0; i < length; i++) this.buf[this.len++] = arr[offset + i] & 0xff;
   };
   ByteWriter.prototype.writeString = function (s) {
-    for (var i = 0; i < s.length; i++) this.writeByte(s.charCodeAt(i));
+    this._ensure(s.length);
+    for (var i = 0; i < s.length; i++) this.buf[this.len++] = s.charCodeAt(i) & 0xff;
   };
-  ByteWriter.prototype.toUint8Array = function () { return new Uint8Array(this.bytes); };
+  ByteWriter.prototype.toUint8Array = function () { return this.buf.subarray(0, this.len); };
 
   // --- LZW encoder (standard GIF LZW/variable-width code algorithm) ------
   var EOF = -1, BITS = 12, HSIZE = 5003;
@@ -1280,6 +1394,14 @@ ctx.fill();
     return out.toUint8Array();
   }
 
+  function resetGifButtons() {
+    downloadGifBtn.disabled = false;
+    downloadPngBtn.disabled = false;
+    playPreviewBtn.disabled = false;
+    state.phase = 1;
+    render();
+  }
+
   downloadGifBtn.addEventListener("click", function () {
     downloadGifBtn.disabled = true;
     downloadPngBtn.disabled = true;
@@ -1287,49 +1409,172 @@ ctx.fill();
     statusText.textContent = "GIF 프레임 렌더링 중…";
 
     setTimeout(function () {
-      var gifScale = 1.6;
-      var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
-      var off = document.createElement("canvas");
-      off.width = gw; off.height = gh;
-      var octx = off.getContext("2d");
-      octx.scale(gifScale, gifScale);
+      try {
+        var gifScale = 1.6;
+        var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
+        var off = document.createElement("canvas");
+        off.width = gw; off.height = gh;
+        var octx = off.getContext("2d");
+        octx.scale(gifScale, gifScale);
 
-      var slideSteps = 16, holdSteps = 6;
-      var totalMs = state.gifSeconds * 1000;
-      var perFrameMs = totalMs / (slideSteps + holdSteps);
-      var phases = [];
-      for (var s = 0; s <= slideSteps; s++) phases.push(s / slideSteps);
-      for (var h = 0; h < holdSteps; h++) phases.push(1);
+        var slideSteps = 16, holdSteps = 6;
+        var totalMs = state.gifSeconds * 1000;
+        var perFrameMs = totalMs / (slideSteps + holdSteps);
+        var phases = [];
+        for (var s = 0; s <= slideSteps; s++) phases.push(s / slideSteps);
+        for (var h = 0; h < holdSteps; h++) phases.push(1);
 
-      var rawFrames = [];
-      phases.forEach(function (ph) {
-        renderScene(octx, ph, state);
-        rawFrames.push(octx.getImageData(0, 0, gw, gh));
-      });
+        var rawFrames = [];
+        phases.forEach(function (ph) {
+          renderScene(octx, ph, state);
+          rawFrames.push(octx.getImageData(0, 0, gw, gh));
+        });
 
-      statusText.textContent = "GIF 색상 팔레트 계산 중…";
-      setTimeout(function () {
-        var palette = buildPaletteFromImageData(rawFrames[rawFrames.length - 1].data, 256);
-        var nearest = makeNearestIndexFn(palette);
-
-        statusText.textContent = "GIF 인코딩 중… (" + rawFrames.length + "프레임)";
+        statusText.textContent = "GIF 색상 팔레트 계산 중…";
         setTimeout(function () {
-          var frames = rawFrames.map(function (imgData) {
-            return { indices: imageDataToIndices(imgData.data, gw, gh, nearest), delay: perFrameMs };
-          });
-          var bytes = encodeGIF({ width: gw, height: gh, palette: palette, frames: frames, loop: state.gifLoop });
-          var blob = new Blob([bytes], { type: "image/gif" });
-          downloadBlob(blob, "instant-print-card.gif");
-          statusText.textContent = "GIF 저장 완료 (" + gw + "×" + gh + ", " + frames.length + "프레임)";
-          downloadGifBtn.disabled = false;
-          downloadPngBtn.disabled = false;
-          playPreviewBtn.disabled = false;
-          state.phase = 1;
-          render();
+          try {
+            // palette pooled across every frame — not just the last still
+            // frame — so colors stay consistent through the whole animation
+            var palette = buildPaletteFromFrames(rawFrames.map(function (f) { return f.data; }), 256);
+            var nearest = makeNearestIndexFn(palette);
+
+            statusText.textContent = "GIF 인코딩 중… (" + rawFrames.length + "프레임)";
+            setTimeout(function () {
+              try {
+                var frames = rawFrames.map(function (imgData) {
+                  // Floyd–Steinberg dithering smooths the gradient backgrounds
+                  // out instead of showing hard 256-color bands
+                  return {
+                    indices: imageDataToIndicesDithered(imgData.data, gw, gh, palette, nearest),
+                    delay: perFrameMs
+                  };
+                });
+                var bytes = encodeGIF({ width: gw, height: gh, palette: palette, frames: frames, loop: state.gifLoop });
+                var blob = new Blob([bytes], { type: "image/gif" });
+                downloadBlob(blob, "instant-print-card.gif");
+                statusText.textContent = "GIF 저장 완료 (" + gw + "×" + gh + ", " + frames.length + "프레임)";
+              } catch (err3) {
+                statusText.textContent = "GIF 인코딩 중 오류가 발생했어요. 다시 시도해 주세요.";
+              }
+              resetGifButtons();
+            }, 20);
+          } catch (err2) {
+            statusText.textContent = "GIF 색상 계산 중 오류가 발생했어요. 다시 시도해 주세요.";
+            resetGifButtons();
+          }
         }, 20);
-      }, 20);
+      } catch (err1) {
+        statusText.textContent = "GIF 렌더링 중 오류가 발생했어요. 다시 시도해 주세요.";
+        resetGifButtons();
+      }
     }, 30);
   });
+
+  // ---------------------------------------------------------------------
+  // Video (WebM) export — uses the browser's own encoder via
+  // canvas.captureStream() + MediaRecorder, so quality is far higher (and
+  // encoding far faster/lighter) than the hand-rolled GIF path above.
+  // Added as a companion "동영상으로 저장" button placed right after the
+  // GIF button, since no video export existed before.
+  // ---------------------------------------------------------------------
+  function createVideoButton() {
+    if (!downloadGifBtn || !downloadGifBtn.parentNode) return null;
+    if (typeof MediaRecorder === "undefined" ||
+        !HTMLCanvasElement.prototype.captureStream) return null;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "downloadVideo";
+    btn.className = downloadGifBtn.className;
+    btn.textContent = "동영상으로 저장";
+    downloadGifBtn.parentNode.insertBefore(btn, downloadGifBtn.nextSibling);
+    return btn;
+  }
+
+  var downloadVideoBtn = createVideoButton();
+
+  if (downloadVideoBtn) {
+    downloadVideoBtn.addEventListener("click", function () {
+      function resetVideoButtons() {
+        downloadVideoBtn.disabled = false;
+        downloadGifBtn.disabled = false;
+        downloadPngBtn.disabled = false;
+        playPreviewBtn.disabled = false;
+        state.phase = 1;
+        render();
+      }
+
+      downloadVideoBtn.disabled = true;
+      downloadGifBtn.disabled = true;
+      downloadPngBtn.disabled = true;
+      playPreviewBtn.disabled = true;
+      statusText.textContent = "동영상 녹화 준비 중…";
+
+      try {
+        var vScale = 1.6;
+        var vw = Math.round(W * vScale), vh = Math.round(H * vScale);
+        var off = document.createElement("canvas");
+        off.width = vw; off.height = vh;
+        var octx = off.getContext("2d");
+        octx.scale(vScale, vScale);
+        renderScene(octx, 0, state);
+
+        var fps = 30;
+        var stream = off.captureStream(fps);
+        var mimeCandidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+        var mimeType = "";
+        for (var m = 0; m < mimeCandidates.length; m++) {
+          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeCandidates[m])) {
+            mimeType = mimeCandidates[m];
+            break;
+          }
+        }
+        var recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 })
+          : new MediaRecorder(stream);
+        var chunks = [];
+        recorder.ondataavailable = function (e) {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        recorder.onerror = function () {
+          statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
+          resetVideoButtons();
+        };
+        recorder.onstop = function () {
+          try {
+            var blob = new Blob(chunks, { type: mimeType || "video/webm" });
+            downloadBlob(blob, "instant-print-card.webm");
+            statusText.textContent = "동영상 저장 완료 (" + vw + "×" + vh + ")";
+          } catch (errStop) {
+            statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
+          }
+          resetVideoButtons();
+        };
+
+        var holdMs = 900;
+        var animMs = state.gifSeconds * 1000;
+        var start = null;
+        recorder.start();
+        statusText.textContent = "동영상 녹화 중…";
+
+        function tick(now) {
+          if (start === null) start = now;
+          var elapsed = now - start;
+          var t = clamp(elapsed / animMs, 0, 1);
+          renderScene(octx, t, state);
+          if (elapsed < animMs + holdMs) {
+            requestAnimationFrame(tick);
+          } else {
+            renderScene(octx, 1, state);
+            setTimeout(function () { recorder.stop(); }, 60);
+          }
+        }
+        requestAnimationFrame(tick);
+      } catch (errStart) {
+        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. GIF 저장을 이용해 주세요.";
+        resetVideoButtons();
+      }
+    });
+  }
 
   // ---------------------------------------------------------------------
   // Init

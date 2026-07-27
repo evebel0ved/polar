@@ -339,31 +339,44 @@
 
   function drawShutterButton(ctx, x, y, r) {
     ctx.save();
+    // outer ring — thin, subdued
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#e2e2df";
+    ctx.fillStyle = "#c7c7c3";
     ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(0,0,0,0.22)";
+    ctx.strokeStyle = "rgba(0,0,0,0.2)";
     ctx.stroke();
 
+    // brushed-satin disc face — flat, low-contrast radial shading
+    // instead of a glossy white highlight
     ctx.beginPath();
     ctx.arc(x, y, r * 0.86, 0, Math.PI * 2);
-    var grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 0.86);
-    grad.addColorStop(0, "#ffffff");
-    grad.addColorStop(0.55, "#cfcfcb");
-    grad.addColorStop(1, "#a5a5a0");
+    var grad = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.15, x, y, r * 0.86);
+    grad.addColorStop(0, "#d9d9d5");
+    grad.addColorStop(0.6, "#b9b9b4");
+    grad.addColorStop(1, "#9c9c96");
     ctx.fillStyle = grad;
     ctx.fill();
 
+    // faint concentric brushed-metal lines
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.16)";
-    ctx.fill();
+    ctx.arc(x, y, r * 0.86, 0, Math.PI * 2);
+    ctx.clip();
+    for (var i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.86 * (i / 4), 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    ctx.restore();
 
+    // small soft highlight, much dimmer than before
     ctx.beginPath();
-    ctx.ellipse(x - r * 0.3, y - r * 0.34, r * 0.28, r * 0.15, -0.6, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.ellipse(x - r * 0.28, y - r * 0.32, r * 0.24, r * 0.13, -0.6, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
     ctx.fill();
     ctx.restore();
   }
@@ -554,11 +567,14 @@
     ctx.fill();
     ctx.restore();
 
-    // body edge line
+    // body edge line — very soft, barely-there contour (the photo relies
+    // on the drop shadow to read the silhouette, not a drawn outline)
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = shade(body, isDark ? 14 : -14);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = shade(body, isDark ? 10 : -6);
+    ctx.globalAlpha = 0.45;
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     // faint top hardware — strap lug (left) and geared advance dial with
     // strap lug (right), both low-contrast like the reference photo
@@ -602,9 +618,10 @@
     // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);
 
-    // bottom-left toggle knob
+    // bottom-left toggle knob — sits right at the rounded corner, mostly
+    // protruding past the body's bottom edge like a small round foot/dial
     var c = cameraCenter();
-    drawToggleKnob(ctx, bx + bw * 0.171, by + bh * 0.79, bw * 0.054, body, isDark);
+    drawToggleKnob(ctx, bx + bw * 0.1, by + bh - bw * 0.02, bw * 0.046, body, isDark);
 
     // lens assembly
     drawLens(ctx, c.cx, c.cy, bw * 0.237);

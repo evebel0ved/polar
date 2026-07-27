@@ -444,47 +444,30 @@
     ctx.restore();
   }
 
- function drawBodyLightSweep(ctx, L, isDark) {
+  function drawBodyLightSweep(ctx, L, isDark) {
     ctx.save();
     roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
     ctx.clip();
-
-    // broad soft radial highlight, offset upper-left (matches photo's glare)
     ctx.globalCompositeOperation = "soft-light";
     var g = ctx.createRadialGradient(
-      L.bodyX + L.bodyW * 0.18, L.bodyY + L.bodyH * 0.5, 10,
-      L.bodyX + L.bodyW * 0.18, L.bodyY + L.bodyH * 0.5, L.bodyW * 0.85
+      L.bodyX + L.bodyW * 0.2, L.bodyY + L.bodyH * 0.42, 10,
+      L.bodyX + L.bodyW * 0.2, L.bodyY + L.bodyH * 0.42, L.bodyW * 0.75
     );
-    g.addColorStop(0, "rgba(255,255,255,1)");
-    g.addColorStop(0.3, "rgba(255,255,255,0.55)");
+    g.addColorStop(0, "rgba(255,255,255,0.95)");
+    g.addColorStop(0.35, "rgba(255,255,255,0.5)");
     g.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g;
     ctx.fillRect(L.bodyX, L.bodyY, L.bodyW, L.bodyH);
 
-    // sharper diagonal glare streak (the more defined bright stripe seen
-    // running from top-left down toward the lens in the reference photo)
     ctx.globalCompositeOperation = "source-over";
-    var g2 = ctx.createLinearGradient(
-      L.bodyX, L.bodyY,
-      L.bodyX + L.bodyW * 0.5, L.bodyY + L.bodyH * 0.6
-    );
-    g2.addColorStop(0, isDark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)");
-    g2.addColorStop(0.45, isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.15)");
+    var g2 = ctx.createLinearGradient(L.bodyX, L.bodyY, L.bodyX + L.bodyW * 0.55, L.bodyY + L.bodyH * 0.55);
+    g2.addColorStop(0, isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.40)");
+    g2.addColorStop(0.5, isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.10)");
     g2.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g2;
     ctx.fillRect(L.bodyX, L.bodyY, L.bodyW, L.bodyH);
-
-    // extra thin bright edge highlight along the top-left body border
-    var g3 = ctx.createLinearGradient(L.bodyX, L.bodyY, L.bodyX + L.bodyW * 0.4, L.bodyY + L.bodyH * 0.15);
-    g3.addColorStop(0, "rgba(255,255,255,0.5)");
-    g3.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.strokeStyle = g3;
-    ctx.lineWidth = 3;
-    roundRectPath(ctx, L.bodyX + 1.5, L.bodyY + 1.5, L.bodyW - 3, L.bodyH - 3, L.bodyR);
-    ctx.stroke();
-
     ctx.restore();
-}
+  }
 
   function drawGearedTopDial(ctx, x, y, r, isDark) {
     ctx.save();
@@ -626,7 +609,7 @@
     ctx.restore();
   }
 
- function drawLens(ctx, cx, cy, R) {
+  function drawLens(ctx, cx, cy, R) {
     ctx.save();
 
     // recessed mount collar (depth behind the lens)
@@ -655,97 +638,54 @@
     ctx.fillStyle = bezelGrad;
     ctx.fill();
 
-    // knurled bezel edge (fine ridges around outer rim)
-    ctx.save();
+    // outer knurled ring band (dense fine ridges, like a focus/filter ring)
+// Leica 스타일 동심원
+
+ctx.strokeStyle = "#3d3d3d";
+
+var knInner = R * 0.33;
+
+for (let i = 0; i < 18; i++) {
+
+    let rr = R - 8 - i * 6;
+
+    if (rr < knInner) break;
+
     ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.clip();
-    var edgeTeeth = 90;
-    for (var e = 0; e < edgeTeeth; e++) {
-      var ea = (e / edgeTeeth) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(ea) * R * 0.94, cy + Math.sin(ea) * R * 0.94);
-      ctx.lineTo(cx + Math.cos(ea) * R, cy + Math.sin(ea) * R);
-      ctx.strokeStyle = e % 2 === 0 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.3)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // "LEICA" engraved text along the top of the bezel
-    ctx.save();
-    ctx.font = "600 " + (R * 0.075) + "px Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(230,228,222,0.85)";
-    ctx.translate(cx, cy - R * 0.86);
-    ctx.fillText("LEICA", 0, 0);
-    ctx.restore();
-
-    // "SUMMAR 1:2 / 2.4" engraved text along the bottom of the bezel
-    ctx.save();
-    ctx.font = "500 " + (R * 0.052) + "px Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(220,218,212,0.7)";
-    ctx.translate(cx, cy + R * 0.9);
-    ctx.fillText("SUMMAR 1:2 / 2.4", 0, 0);
-    ctx.restore();
-
-    // outer knurled ring band — concentric rings with graded light/dark
-    // to mimic the photo's subtle curvature and glass reflections
-    var knInner = R * 0.33;
-    var ringCount = 18;
-    for (let i = 0; i < ringCount; i++) {
-      let rr = R - 14 - i * 6;
-      if (rr < knInner) break;
-      let t = i / ringCount; // 0 = outer, 1 = inner
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-      // base ring tone darkens slightly toward the middle rings, then
-      // the very inner rings pick back up a bit (subtle glass highlight)
-      var ringShade = 30 - t * 22 + Math.sin(t * Math.PI) * 6;
-      ctx.strokeStyle = "rgb(" + ringShade + "," + ringShade + "," + ringShade + ")";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // faint top-left highlight arc on each ring for glassy dimension
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, Math.PI * 1.1, Math.PI * 1.6);
-      ctx.strokeStyle = "rgba(255,255,255,0.06)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    // last concentric ring right before the center cap
-    ctx.beginPath();
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.lineWidth = 1;
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
     ctx.stroke();
-
-    // center black cap
-    ctx.beginPath();
-    ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
-    var centerGrad = ctx.createRadialGradient(
-      cx - knInner * 0.25, cy - knInner * 0.25, knInner * 0.08,
-      cx, cy, knInner
-    );
-    centerGrad.addColorStop(0, "#1d1d1d");
-    centerGrad.addColorStop(0.5, "#0c0c0c");
-    centerGrad.addColorStop(1, "#000000");
-    ctx.fillStyle = centerGrad;
-    ctx.fill();
-
-    // tiny center highlight dot (as seen in the photo)
-    ctx.beginPath();
-    ctx.ellipse(cx - knInner * 0.18, cy - knInner * 0.2, knInner * 0.1, knInner * 0.06, -0.6, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
-    ctx.fill();
-
-    ctx.restore();
 }
+
+// 마지막 동심원
+ctx.beginPath();
+ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
+ctx.strokeStyle = "rgba(255,255,255,0.1)";
+ctx.lineWidth = 1;
+ctx.stroke();
+
+// 가운데 검정 원
+ctx.beginPath();
+ctx.arc(cx, cy, knInner, 0, Math.PI * 2);
+
+var centerGrad = ctx.createRadialGradient(
+    cx - knInner * 0.25,
+    cy - knInner * 0.25,
+    knInner * 0.08,
+    cx,
+    cy,
+    knInner
+);
+
+centerGrad.addColorStop(0, "#1d1d1d");
+centerGrad.addColorStop(0.5, "#0c0c0c");
+centerGrad.addColorStop(1, "#000000");
+
+ctx.fillStyle = centerGrad;
+ctx.fill();
+    
+    ctx.restore(); 
+  }
   // ---------------------------------------------------------------------
   // Polaroid card (orientation aware)
   // ---------------------------------------------------------------------

@@ -168,15 +168,33 @@
   // composition). W is always 1400; H is 800 for horizontal or 1400
   // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
+  // Approx. how far the photo card's own drop-shadow (shadowBlur 32,
+  // shadowOffsetY 10) spreads above the card's top edge — used to keep
+  // the card's retracted start position tucked behind the camera body
+  // instead of flush with its top edge (see cardTopAt).
+  var CARD_SHADOW_TOP_INSET = 28;
+
+  // Small fixed top/bottom margin for vertical layout — replaces the old
+  // approach of centering the content in a much taller square canvas,
+  // which produced ~250px of empty space on each side. Kept just large
+  // enough that the camera's own top hardware nubs/shutter-shadow and
+  // the card's drop-shadow have room to render without being clipped by
+  // the canvas edge.
+  var VERTICAL_MARGIN = 40;
+
   var CARD_DIMS = {
     // vertical card is narrower than the (now bigger) camera body so the
     // ejected photo stays visually contained within the camera's footprint
     // instead of poking out past its left/right edges
     vertical:   { w: 420, h: 500, side: "bottom", margin: 92 },
-    // horizontal card is height-capped so it never extends past the
-    // camera body's top/bottom edges (see cameraCenter() below) —
-    // enlarged as far as that cap allows (max ~330 at this bodyH/shoulderH)
-    horizontal: { w: 480, h: 324, side: "right",  margin: 92 }
+    // horizontal card enlarged (324 -> 380) so the photo now extends up
+    // into the shoulder-plate area instead of stopping at the lens
+    // centerline — see drawPhotoCard's horizontal `top` calc, which
+    // anchors from L.bodyY with a fixed clearance instead of centering
+    // on cameraCenter(). Height chosen (with that anchor) so even the
+    // 3rd stacked photo's stack.y offset + drop shadow stay inside
+    // L.bodyY..L.bodyY+L.bodyH — never pokes out past the camera body.
+    horizontal: { w: 480, h: 380, side: "right",  margin: 92 }
   };
 
   // horizontal (landscape) layout — card ejects sideways from under the
@@ -201,9 +219,11 @@
     var VERTICAL_SCALE = 580 / 620;
     var bodyW = 620 * VERTICAL_SCALE, bodyH = 424 * VERTICAL_SCALE,
         bodyR = 36 * VERTICAL_SCALE, shoulderH = 94 * VERTICAL_SCALE;
-    var cardH = CARD_DIMS.vertical.h;
-    var totalContentH = bodyH + cardH;
-    var bodyY = Math.max(30, Math.round((H - totalContentH) / 2));
+    // Canvas height is now sized (in applyOrientationDims) to exactly fit
+    // this content plus VERTICAL_MARGIN on each side, so bodyY is just
+    // that fixed margin rather than a centering calc against a much
+    // taller canvas.
+    var bodyY = VERTICAL_MARGIN;
     return {
       bodyX: (W - bodyW) / 2,
       bodyY: bodyY,
@@ -220,7 +240,17 @@
   // export, which reads W/H at save time) always matches what's selected.
   function applyOrientationDims(orientation) {
     if (orientation === "vertical") {
-      W = 1400; H = 1400; // square canvas
+      // Previously a fixed 1400 square, which left roughly 250px of
+      // empty space above AND below the camera+card group (it was
+      // centered in a canvas much taller than the content actually
+      // needs). Now sized directly off the real content height (camera
+      // body + ejected card, at vertical layout's proportions) plus a
+      // small fixed margin on each side, so the canvas hugs the content
+      // instead of floating it in a mostly-empty square.
+      var vs = 580 / 620;
+      var contentH = 424 * vs + CARD_DIMS.vertical.h;
+      W = 1400;
+      H = Math.round(contentH + VERTICAL_MARGIN * 2);
     } else {
       W = 1400; H = 800;  // shorter canvas — less empty space above/below
     }
@@ -250,7 +280,15 @@
   // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
-    var startY = Math.max(bodyBottom - cardH + 56, L.bodyY);
+    // Clamped to L.bodyY + CARD_SHADOW_TOP_INSET rather than flush with
+    // L.bodyY: the card's drop-shadow (blur 32, offsetY 10) spreads
+    // roughly 22px above its own top edge. When the card's top landed
+    // exactly on the body's top edge, that shadow spread poked out above
+    // the (opaque) camera body — visible as a stray shadow sliver at the
+    // very start of the eject animation. Insetting the start position
+    // keeps the card's top, and therefore its shadow spread, behind the
+    // camera body until it has actually started sliding out.
+    var startY = Math.max(bodyBottom - cardH + 56, L.bodyY + CARD_SHADOW_TOP_INSET);
     var endY = bodyBottom;
     return lerp(startY, endY, e);
   }
@@ -278,72 +316,55 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Many mobile browsers (notably iOS Safari / mobile WebViews) silently
-  // ignore ctx.filter when actually drawing — no exception is thrown, it
-  // just no-ops — even though reading ctx.filter back reports the value
-  // was accepted. That means the round-trip probe below is NOT reliable:
-  // it can report "supported" on exactly the browsers that then fail to
-  // render the blur, which is why blur kept breaking on mobile even with
-  // this guard in place. Detection is kept only for reference — actual
-  // rendering always goes through drawManualBlur() unconditionally (see
-  // drawBlurredPhotoBackground below), since that path works identically
-  // everywhere regardless of ctx.filter support.
+  // Some mobile browsers (notably several mobile WebViews / Samsung
+  // Internet / in-app browsers) silently ignore ctx.filter at *draw* time
+  // even though they happily store and echo back ctx.filter as a string —
+  // so the old check (`probe.filter === "blur(2px)"`) reported "supported"
+  // on exactly the devices where the background then rendered unblurred.
+  // This version actually draws a hard-edged shape with a blur filter onto
+  // a tiny offscreen canvas and inspects the resulting pixels: if the edge
+  // pixel isn't measurably softened, real blur rendering isn't happening,
+  // regardless of what the filter property claims.
   var _canvasFilterSupport = null;
   function supportsCanvasFilter() {
     if (_canvasFilterSupport !== null) return _canvasFilterSupport;
     try {
-      var probe = document.createElement("canvas").getContext("2d");
-      probe.filter = "blur(2px)";
-      _canvasFilterSupport = probe.filter === "blur(2px)";
+      var size = 20;
+      var probeCanvas = document.createElement("canvas");
+      probeCanvas.width = size; probeCanvas.height = size;
+      var probe = probeCanvas.getContext("2d");
+      if (!probe || typeof probe.filter === "undefined") {
+        _canvasFilterSupport = false;
+        return _canvasFilterSupport;
+      }
+      // left half solid black, right half left transparent, then blur it —
+      // a real blur will bleed some black into the right half; a no-op
+      // filter leaves the right half fully transparent (alpha 0).
+      probe.clearRect(0, 0, size, size);
+      probe.fillStyle = "#000000";
+      probe.fillRect(0, 0, size / 2, size);
+      probe.filter = "blur(4px)";
+      probe.drawImage(probeCanvas, 0, 0);
+      var mid = probe.getImageData(size / 2 + 2, Math.floor(size / 2), 1, 1).data;
+      _canvasFilterSupport = mid[3] > 10; // alpha bled past the hard edge
     } catch (e) {
       _canvasFilterSupport = false;
     }
     return _canvasFilterSupport;
   }
 
-  // Manual blur: drawing the source image far smaller and letting the
-  // browser's own bitmap smoothing scale it back up approximates a soft
-  // gaussian blur without depending on the ctx.filter API at all, so it
-  // renders identically on desktop and mobile (including iOS Safari /
-  // WebViews, where ctx.filter silently no-ops at draw time).
+  // Manual blur fallback for browsers without ctx.filter support: drawing
+  // the source image far smaller and letting the browser's own bitmap
+  // smoothing scale it back up approximates a soft gaussian blur without
+  // depending on the filter API at all, so it works everywhere.
   function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
     var factor = clamp(blurRadius / 3, 6, 60);
     var smallW = Math.max(6, Math.round(destW / factor));
     var smallH = Math.max(6, Math.round(destH / factor));
-
-    // Shrink in repeated ~50% steps instead of one single huge jump (a
-    // multi-thousand-px photo straight down to ~20px in one drawImage
-    // call). A single very large downscale ratio is exactly where mobile
-    // GPU bilinear samplers tend to skip source pixels instead of
-    // averaging them, which is what produced hard/blocky broken pixels
-    // even with imageSmoothingEnabled on. Halving repeatedly keeps every
-    // individual step's ratio small (≤2x), which every device's sampler
-    // handles as a smooth average — the standard "mip-chain" downscale
-    // approach — so the end result is an actual soft blur everywhere.
-    var curW = crop.sw, curH = crop.sh;
-    var curCanvas = img, curSx = crop.sx, curSy = crop.sy;
-    while (curW > smallW * 2 || curH > smallH * 2) {
-      var nextW = Math.max(smallW, Math.round(curW / 2));
-      var nextH = Math.max(smallH, Math.round(curH / 2));
-      var stepCanvas = document.createElement("canvas");
-      stepCanvas.width = nextW; stepCanvas.height = nextH;
-      var stepCtx = stepCanvas.getContext("2d");
-      stepCtx.imageSmoothingEnabled = true;
-      if ("imageSmoothingQuality" in stepCtx) stepCtx.imageSmoothingQuality = "high";
-      stepCtx.drawImage(curCanvas, curSx, curSy, curW, curH, 0, 0, nextW, nextH);
-      curCanvas = stepCanvas; curSx = 0; curSy = 0; curW = nextW; curH = nextH;
-    }
-
     var small = document.createElement("canvas");
     small.width = smallW; small.height = smallH;
     var sctx = small.getContext("2d");
-    // Smoothing must be turned on for every draw in this chain, including
-    // the final upscale back onto `ctx` below. Several mobile browsers/
-    // WebViews create new canvases with imageSmoothingEnabled effectively
-    // off (or fall back to nearest-neighbor) unless it's set explicitly.
-    sctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in sctx) sctx.imageSmoothingQuality = "high";
-    sctx.drawImage(curCanvas, curSx, curSy, curW, curH, 0, 0, smallW, smallH);
+    sctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, smallW, smallH);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
@@ -356,13 +377,16 @@
     var pad = 80;
     var blurRadius = 42;
     ctx.save();
-    // Always draw via the manual (downscale + smoothed upscale) blur path
-    // instead of ctx.filter — see the note above supportsCanvasFilter():
-    // ctx.filter reports itself as supported on several mobile browsers
-    // that then quietly skip the actual blur at draw time, leaving the
-    // background sharp with no error. drawManualBlur doesn't depend on
-    // that API at all, so it renders correctly on every device.
-    drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
+    if (supportsCanvasFilter()) {
+      try {
+        ctx.filter = "blur(" + blurRadius + "px) saturate(1.06) brightness(0.94)";
+        ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
+      } catch (err) {
+        drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
+      }
+    } else {
+      drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
+    }
     ctx.restore();
 
     var vg = ctx.createLinearGradient(0, 0, 0, H);
@@ -910,9 +934,17 @@ ctx.fill();
       left = (W - dims.w) / 2;
       top = cardTopAt(e, dims.h, L);
     } else {
-      var c = cameraCenter(L);
+      // Anchored from the body's top edge with a small fixed clearance,
+      // instead of vertically centering on cameraCenter() (the lens
+      // area below the shoulder plate). Centering on the lens left ~97px
+      // of unused headroom above the card that overlapped the shoulder
+      // plate but was never used — this reclaims that space so the photo
+      // extends up into the shoulder area, while the fixed clearance
+      // (rather than a center calc) keeps the math simple to reason
+      // about for the bottom-edge safety check below.
+      var topClearance = 16;
       left = cardLeftAt(e, dims.w, L);
-      top = c.cy - dims.h / 2;
+      top = L.bodyY + topClearance;
     }
     // stacked photos (2nd/3rd) settle slightly offset & rotated from the
     // first, like a scattered pile of instant prints, instead of sitting
@@ -958,16 +990,6 @@ ctx.fill();
     ctx.save();
     roundRectPath(ctx, pX, pY, pW, pH, 2);
     ctx.clip();
-    // Explicit opaque white backing behind the photo slot itself (not just
-    // the outer card fill a few pixels further out). Anti-aliasing on the
-    // rounded-rect clip edge can otherwise let a sliver of whatever is
-    // behind it — the colored background, seen through the card's own
-    // edge — blend into the photo's border pixels, which read as the
-    // background color "tinting" the photo. Filling this rect first,
-    // still inside the same clip, guarantees only white sits behind the
-    // photo no matter how saturated the chosen background color is.
-    ctx.fillStyle = "#fdfdfb";
-    ctx.fillRect(pX, pY, pW, pH);
     if (photoImg) {
       var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, pW, pH);
       ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, pX, pY, pW, pH);
@@ -1646,17 +1668,15 @@ ctx.fill();
 
     setTimeout(function () {
       try {
-        // gifScale was 1.6 (2240×1280px). Ordered/Bayer dithering leaves a
-        // fixed high-frequency dot pattern in the pixels — fine at 1:1, but
-        // when a phone has to shrink a 2240px-wide image down to its own
-        // (much smaller, ~360-430px-wide) screen, that shrink is exactly
-        // the kind of naive downsampling that aliases a regular dot pattern
-        // into new, coarser, very visible dots — which is why it only
-        // looked clean once zoomed in to ~100%. Rendering at a size close
-        // to real mobile display width means phones show it at or near 1:1
-        // instead of downsampling it, removing the aliasing source rather
-        // than trying to out-shrink it.
-        var gifScale = 0.9;
+        // Raised from 1.6 to 2.2: on high-density phone screens (2x-3x
+        // device pixel ratio) a 1.6x export (2240x1280) still gets
+        // upscaled by the OS/gallery viewer when opened at normal size,
+        // which blows the fixed 8x8 Bayer dither pattern up into visible
+        // "grain" without the user needing to pinch-zoom. At 2.2x
+        // (3080x1760) each dither cell maps to a smaller fraction of the
+        // screen, so the pattern stays below the eye's resolving power at
+        // normal viewing sizes.
+        var gifScale = 2.2;
         var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
         var off = document.createElement("canvas");
         off.width = gw; off.height = gh;
@@ -1700,12 +1720,14 @@ ctx.fill();
                   // without the frame-to-frame shimmer error-diffusion
                   // dithering caused on this animation
                   return {
-                    // strength lowered further, from 9 to 5, on top of the
-                    // gifScale reduction above — together these keep the
-                    // dot pattern small enough in both amplitude and pixel
-                    // size that it isn't picked out by the eye at normal
-                    // (non-zoomed) mobile viewing sizes, while still
-                    // breaking up flat-color/gradient banding.
+                    // strength lowered again, 9 -> 5, alongside the export
+                    // resolution bump above. 9 still produced a visible
+                    // dot grid on high-density mobile screens at normal
+                    // (non-zoomed) viewing size. 5 is the smallest nudge
+                    // that still meaningfully breaks flat-color/gradient
+                    // banding into the 256-color palette, while staying
+                    // under the threshold of what's visible without
+                    // zooming in.
                     indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 5),
                     delay: perFrameMs
                   };

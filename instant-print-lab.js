@@ -278,10 +278,16 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Some mobile browsers (notably several mobile WebViews / older Safari)
-  // silently ignore ctx.filter — no exception is thrown, it just no-ops —
-  // so the try/catch below never caught it and the background rendered
-  // unblurred. This checks support for real by round-tripping the value.
+  // Many mobile browsers (notably iOS Safari / mobile WebViews) silently
+  // ignore ctx.filter when actually drawing — no exception is thrown, it
+  // just no-ops — even though reading ctx.filter back reports the value
+  // was accepted. That means the round-trip probe below is NOT reliable:
+  // it can report "supported" on exactly the browsers that then fail to
+  // render the blur, which is why blur kept breaking on mobile even with
+  // this guard in place. Detection is kept only for reference — actual
+  // rendering always goes through drawManualBlur() unconditionally (see
+  // drawBlurredPhotoBackground below), since that path works identically
+  // everywhere regardless of ctx.filter support.
   var _canvasFilterSupport = null;
   function supportsCanvasFilter() {
     if (_canvasFilterSupport !== null) return _canvasFilterSupport;
@@ -295,10 +301,11 @@
     return _canvasFilterSupport;
   }
 
-  // Manual blur fallback for browsers without ctx.filter support: drawing
-  // the source image far smaller and letting the browser's own bitmap
-  // smoothing scale it back up approximates a soft gaussian blur without
-  // depending on the filter API at all, so it works everywhere.
+  // Manual blur: drawing the source image far smaller and letting the
+  // browser's own bitmap smoothing scale it back up approximates a soft
+  // gaussian blur without depending on the ctx.filter API at all, so it
+  // renders identically on desktop and mobile (including iOS Safari /
+  // WebViews, where ctx.filter silently no-ops at draw time).
   function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
     var factor = clamp(blurRadius / 3, 6, 60);
     var smallW = Math.max(6, Math.round(destW / factor));
@@ -319,16 +326,13 @@
     var pad = 80;
     var blurRadius = 42;
     ctx.save();
-    if (supportsCanvasFilter()) {
-      try {
-        ctx.filter = "blur(" + blurRadius + "px) saturate(1.06) brightness(0.94)";
-        ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
-      } catch (err) {
-        drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
-      }
-    } else {
-      drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
-    }
+    // Always draw via the manual (downscale + smoothed upscale) blur path
+    // instead of ctx.filter — see the note above supportsCanvasFilter():
+    // ctx.filter reports itself as supported on several mobile browsers
+    // that then quietly skip the actual blur at draw time, leaving the
+    // background sharp with no error. drawManualBlur doesn't depend on
+    // that API at all, so it renders correctly on every device.
+    drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
     ctx.restore();
 
     var vg = ctx.createLinearGradient(0, 0, 0, H);
@@ -924,6 +928,16 @@ ctx.fill();
     ctx.save();
     roundRectPath(ctx, pX, pY, pW, pH, 2);
     ctx.clip();
+    // Explicit opaque white backing behind the photo slot itself (not just
+    // the outer card fill a few pixels further out). Anti-aliasing on the
+    // rounded-rect clip edge can otherwise let a sliver of whatever is
+    // behind it — the colored background, seen through the card's own
+    // edge — blend into the photo's border pixels, which read as the
+    // background color "tinting" the photo. Filling this rect first,
+    // still inside the same clip, guarantees only white sits behind the
+    // photo no matter how saturated the chosen background color is.
+    ctx.fillStyle = "#fdfdfb";
+    ctx.fillRect(pX, pY, pW, pH);
     if (photoImg) {
       var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, pW, pH);
       ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, pX, pY, pW, pH);
@@ -1602,7 +1616,17 @@ ctx.fill();
 
     setTimeout(function () {
       try {
-        var gifScale = 1.6;
+        // gifScale was 1.6 (2240×1280px). Ordered/Bayer dithering leaves a
+        // fixed high-frequency dot pattern in the pixels — fine at 1:1, but
+        // when a phone has to shrink a 2240px-wide image down to its own
+        // (much smaller, ~360-430px-wide) screen, that shrink is exactly
+        // the kind of naive downsampling that aliases a regular dot pattern
+        // into new, coarser, very visible dots — which is why it only
+        // looked clean once zoomed in to ~100%. Rendering at a size close
+        // to real mobile display width means phones show it at or near 1:1
+        // instead of downsampling it, removing the aliasing source rather
+        // than trying to out-shrink it.
+        var gifScale = 0.9;
         var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
         var off = document.createElement("canvas");
         off.width = gw; off.height = gh;
@@ -1646,14 +1670,13 @@ ctx.fill();
                   // without the frame-to-frame shimmer error-diffusion
                   // dithering caused on this animation
                   return {
-                    // strength lowered from 20 to 9: the old value shifted
-                    // pixels enough to read as a fixed dot/grain pattern
-                    // once a phone downsamples the image to fit the
-                    // screen (it only disappeared when zoomed in to 100%,
-                    // which is exactly what "aliased dither pattern" looks
-                    // like). This still breaks flat-color/gradient banding
-                    // without being visible at normal viewing sizes.
-                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 9),
+                    // strength lowered further, from 9 to 5, on top of the
+                    // gifScale reduction above — together these keep the
+                    // dot pattern small enough in both amplitude and pixel
+                    // size that it isn't picked out by the eye at normal
+                    // (non-zoomed) mobile viewing sizes, while still
+                    // breaking up flat-color/gradient banding.
+                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 5),
                     delay: perFrameMs
                   };
                 });

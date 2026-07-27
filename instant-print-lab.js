@@ -153,13 +153,13 @@
   // of device, so preview and every exported file share one composition)
   // ---------------------------------------------------------------------
   var LAYOUT = {
-    bodyX: 90, bodyY: 190, bodyW: 760, bodyH: 620, bodyR: 34,
-    shoulderH: 132
+    bodyX: 150, bodyY: 236, bodyW: 630, bodyH: 512, bodyR: 30,
+    shoulderH: 112
   };
 
   var CARD_DIMS = {
-    vertical:   { w: 420, h: 500, side: "bottom", margin: 96 },
-    horizontal: { w: 540, h: 400, side: "right",  margin: 112 }
+    vertical:   { w: 494, h: 588, side: "bottom", margin: 112 },
+    horizontal: { w: 634, h: 470, side: "right",  margin: 132 }
   };
 
   function cameraCenter() {
@@ -233,39 +233,87 @@
   // ---------------------------------------------------------------------
   function drawToggleKnob(ctx, x, y, r, body, isDark) {
     ctx.save();
+
+    // recessed body-colored collar the knob sits inside
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.22, 0, Math.PI * 2);
+    ctx.fillStyle = shade(body, isDark ? -14 : -10);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.22, 0, Math.PI * 2);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = shade(body, isDark ? 6 : -22);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.08, Math.PI * 0.9, Math.PI * 1.6);
+    ctx.strokeStyle = "rgba(0,0,0,0.22)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // dark knurled dial face
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     var grad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.15, x, y, r);
-    grad.addColorStop(0, "#3a3a3c");
-    grad.addColorStop(0.6, "#1c1c1e");
-    grad.addColorStop(1, "#0a0a0b");
+    grad.addColorStop(0, "#38393a");
+    grad.addColorStop(0.6, "#19191b");
+    grad.addColorStop(1, "#050506");
     ctx.fillStyle = grad;
     ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = shade(body, isDark ? 14 : -18);
+
+    // fine ridged edge
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.clip();
+    var teeth = 40;
+    for (var t = 0; t < teeth; t++) {
+      var ta = (t / teeth) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(ta) * r * 0.86, y + Math.sin(ta) * r * 0.86);
+      ctx.lineTo(x + Math.cos(ta) * r, y + Math.sin(ta) * r);
+      ctx.strokeStyle = t % 2 === 0 ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.35)";
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = "rgba(0,0,0,0.4)";
     ctx.stroke();
 
     // thin metallic rim highlight (top-left arc)
     ctx.beginPath();
-    ctx.arc(x, y, r - 1.5, Math.PI * 1.05, Math.PI * 1.75);
-    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.arc(x, y, r - 2, Math.PI * 1.05, Math.PI * 1.75);
+    ctx.strokeStyle = "rgba(255,255,255,0.24)";
     ctx.lineWidth = 1.4;
     ctx.stroke();
 
-    // two position-marker dots
+    // raised center dial
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
+    var capGrad = ctx.createRadialGradient(x - r * 0.2, y - r * 0.24, r * 0.05, x, y, r * 0.62);
+    capGrad.addColorStop(0, "#333537");
+    capGrad.addColorStop(0.7, "#141416");
+    capGrad.addColorStop(1, "#020203");
+    ctx.fillStyle = capGrad;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.stroke();
+
+    // two position-marker dots + pointer notch, offset like a real index mark
     [-0.62, 0.62].forEach(function (off) {
       var a = -Math.PI / 2 + off;
-      var dx = x + Math.cos(a) * r * 0.55;
-      var dy = y + Math.sin(a) * r * 0.55;
+      var dx = x + Math.cos(a) * r * 0.4;
+      var dy = y + Math.sin(a) * r * 0.4;
       ctx.beginPath();
-      ctx.arc(dx, dy, r * 0.1, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(240,240,238,0.85)";
+      ctx.arc(dx, dy, r * 0.07, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(238,236,232,0.9)";
       ctx.fill();
     });
-    // center cap
     ctx.beginPath();
-    ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.ellipse(x - r * 0.16, y - r * 0.18, r * 0.09, r * 0.05, -0.5, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.fill();
     ctx.restore();
   }
@@ -339,23 +387,49 @@
 
   function drawRidgedSwitch(ctx, x, y, w, h, body, isDark) {
     ctx.save();
+    // sunken bezel
+    roundRectPath(ctx, x - 3, y - 3, w + 6, h + 6, (h + 6) / 2);
+    ctx.fillStyle = shade(body, isDark ? -22 : -16);
+    ctx.fill();
+
     roundRectPath(ctx, x, y, w, h, h / 2);
     ctx.clip();
-    var base = shade(body, isDark ? -18 : -22);
-    ctx.fillStyle = base;
+    var g = ctx.createLinearGradient(x, y, x, y + h);
+    var base = shade(body, isDark ? -20 : -26);
+    g.addColorStop(0, shade(base, 10));
+    g.addColorStop(0.5, base);
+    g.addColorStop(1, shade(base, -12));
+    ctx.fillStyle = g;
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.22)";
-    ctx.lineWidth = 1.3;
-    for (var i = x; i < x + w; i += 4) {
+
+    // diagonal cross-hatched waffle texture
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)";
+    ctx.lineWidth = 1.1;
+    var step = 5.5;
+    for (var i = -h; i < w + h; i += step) {
       ctx.beginPath();
-      ctx.moveTo(i, y);
-      ctx.lineTo(i, y + h);
+      ctx.moveTo(x + i, y);
+      ctx.lineTo(x + i + h, y + h);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.16)";
+    for (var j = -h; j < w + h; j += step) {
+      ctx.beginPath();
+      ctx.moveTo(x + j, y + h);
+      ctx.lineTo(x + j + h, y);
       ctx.stroke();
     }
     ctx.restore();
+
     roundRectPath(ctx, x, y, w, h, h / 2);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.22)";
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.25)";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.14, y + 1.4);
+    ctx.lineTo(x + w * 0.86, y + 1.4);
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 
@@ -397,15 +471,50 @@
     ctx.restore();
   }
 
+  function drawGearedTopDial(ctx, x, y, r, isDark) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
+    g.addColorStop(0, "#3d3d3f");
+    g.addColorStop(0.65, "#1c1c1e");
+    g.addColorStop(1, "#060607");
+    ctx.fillStyle = g;
+    ctx.fill();
+    var teeth = 28;
+    for (var t = 0; t < teeth; t++) {
+      var ta = (t / teeth) * Math.PI * 2;
+      var x1 = x + Math.cos(ta) * r * 0.86, y1 = y + Math.sin(ta) * r * 0.86;
+      var x2 = x + Math.cos(ta) * r, y2 = y + Math.sin(ta) * r;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = t % 2 === 0 ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, r - 1.5, Math.PI * 1.05, Math.PI * 1.7);
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawCamera(ctx, colorDef) {
     var L = LAYOUT;
     var body = colorDef.body;
     var isDark = isDarkColor(body);
+    var k = L.bodyW / 630; // proportional scale for hardware sizing
 
     ctx.save();
     ctx.shadowColor = "rgba(20,16,12,0.28)";
-    ctx.shadowBlur = 46;
-    ctx.shadowOffsetY = 22;
+    ctx.shadowBlur = 40 * k;
+    ctx.shadowOffsetY = 18 * k;
 
     // body
     roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.bodyH, L.bodyR);
@@ -423,13 +532,15 @@
     ctx.strokeStyle = shade(body, isDark ? 14 : -14);
     ctx.stroke();
 
-    // top nubs — small switch/lever shapes peeking above the top edge
-    drawTopNub(ctx, L.bodyX + 46, L.bodyY + 2, 30, 13, -0.05, shade(body, isDark ? 10 : -6));
-    drawTopNub(ctx, L.bodyX + L.bodyW - 44, L.bodyY + 1, 26, 12, -0.5, "#1c1c1e");
+    // top hardware — small strap lug (left) and geared advance dial with
+    // strap lug (right), both peeking just above the top edge
+    drawTopNub(ctx, L.bodyX + 34 * k, L.bodyY + 3 * k, 24 * k, 11 * k, -0.05, shade(body, isDark ? 10 : -6));
+    drawTopNub(ctx, L.bodyX + L.bodyW - 40 * k, L.bodyY - 2 * k, 20 * k, 20 * k, 0, shade(body, isDark ? 10 : -6));
+    drawGearedTopDial(ctx, L.bodyX + L.bodyW - 40 * k, L.bodyY + 4 * k, 17 * k, isDark);
 
     // shoulder band (top)
     roundRectPath(ctx, L.bodyX, L.bodyY, L.bodyW, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
-    ctx.fillStyle = shade(body, isDark ? -6 : -8);
+    ctx.fillStyle = shade(body, isDark ? -5 : -7);
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(L.bodyX, L.bodyY + L.shoulderH + 0.5);
@@ -439,25 +550,25 @@
     ctx.stroke();
 
     // grey sensor / viewfinder window (center-left of shoulder)
-    var winW = 78, winH = 46, winX = L.bodyX + L.bodyW * 0.42, winY = L.bodyY + (L.shoulderH - winH) / 2;
+    var winW = 66 * k, winH = 39 * k, winX = L.bodyX + L.bodyW * 0.40, winY = L.bodyY + (L.shoulderH - winH) / 2;
     drawWindow(ctx, winX, winY, winW, winH);
 
     // chrome shutter button
-    var shX = winX + winW + 66, shY = L.bodyY + L.shoulderH / 2;
-    drawShutterButton(ctx, shX, shY, 34);
+    var shX = winX + winW + 58 * k, shY = L.bodyY + L.shoulderH / 2;
+    drawShutterButton(ctx, shX, shY, 29 * k);
 
     // red vertical status LED
-    drawStatusLED(ctx, shX + 58, shY - 22, 13, 44);
+    drawStatusLED(ctx, shX + 50 * k, shY - 19 * k, 11 * k, 37 * k);
 
     // ridged mode switch (far right of shoulder)
-    drawRidgedSwitch(ctx, L.bodyX + L.bodyW - 96, shY - 20, 66, 40, body, isDark);
+    drawRidgedSwitch(ctx, L.bodyX + L.bodyW - 84 * k, shY - 17 * k, 56 * k, 34 * k, body, isDark);
 
     // bottom-left toggle knob, tucked at the base of the shoulder/lens area
     var c = cameraCenter();
-    drawToggleKnob(ctx, L.bodyX + 78, L.bodyY + L.bodyH - 66, 46, body, isDark);
+    drawToggleKnob(ctx, L.bodyX + 66 * k, L.bodyY + L.bodyH - 56 * k, 39 * k, body, isDark);
 
     // lens assembly
-    drawLens(ctx, c.cx, c.cy, 240);
+    drawLens(ctx, c.cx, c.cy, 200 * k);
 
     // soft diagonal light sweep across the body for a glossier, 3D feel
     drawBodyLightSweep(ctx, L, isDark);
@@ -481,9 +592,20 @@
 
     // recessed mount collar (depth behind the lens)
     ctx.beginPath();
-    ctx.arc(cx, cy, R + 10, 0, Math.PI * 2);
-    ctx.fillStyle = "#050505";
+    ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
+    ctx.fillStyle = "#030303";
     ctx.fill();
+
+    // thin bright chrome trim ring where the lens meets the body
+    ctx.beginPath();
+    ctx.arc(cx, cy, R + 6, 0, Math.PI * 2);
+    var trimGrad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+    trimGrad.addColorStop(0, "#e9e9e6");
+    trimGrad.addColorStop(0.5, "#8b8b86");
+    trimGrad.addColorStop(1, "#3a3a38");
+    ctx.strokeStyle = trimGrad;
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
     // outer bezel
     ctx.beginPath();
@@ -501,14 +623,14 @@
     ctx.arc(cx, cy, knOuter, 0, Math.PI * 2);
     ctx.arc(cx, cy, knInner, 0, Math.PI * 2, true);
     ctx.clip("evenodd");
-    var teeth = 96;
+    var teeth = 130;
     for (var t = 0; t < teeth; t++) {
       var ta = (t / teeth) * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(ta) * knInner, cy + Math.sin(ta) * knInner);
       ctx.lineTo(cx + Math.cos(ta) * knOuter, cy + Math.sin(ta) * knOuter);
       ctx.strokeStyle = t % 2 === 0 ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.4)";
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = 1.3;
       ctx.stroke();
     }
     ctx.restore();
@@ -549,7 +671,7 @@
 
     // aperture-blade facets ring, just outside the glass dome
     var facetR = R * 0.56;
-    var facetCount = 10;
+    var facetCount = 14;
     for (var f = 0; f < facetCount; f++) {
       var fa = (f / facetCount) * Math.PI * 2;
       var fa2 = ((f + 1) / facetCount) * Math.PI * 2;
@@ -573,10 +695,10 @@
     ctx.fill();
 
     // fine concentric grooves inside the dome
-    for (var gc = 1; gc <= 5; gc++) {
+    for (var gc = 1; gc <= 8; gc++) {
       ctx.beginPath();
-      ctx.arc(cx, cy, gR * (gc / 6), 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.arc(cx, cy, gR * (gc / 9), 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.045)";
       ctx.lineWidth = 1;
       ctx.stroke();
     }

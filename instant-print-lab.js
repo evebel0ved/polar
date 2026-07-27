@@ -396,22 +396,25 @@
     ctx.fillRect(x, y, w, h);
 
     // diagonal cross-hatched waffle texture
-    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)";
+    // 세로 줄무늬 패턴
+  var step = 3.5; // 선 사이 간격
+  for (var ix = x + 3; ix < x + w - 3; ix += step) {
+    // 음영 선
+    ctx.beginPath();
+    ctx.moveTo(ix, y);
+    ctx.lineTo(ix, y + h);
+    ctx.strokeStyle = isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.3)";
     ctx.lineWidth = 1.1;
-    var step = 5.5;
-    for (var i = -h; i < w + h; i += step) {
-      ctx.beginPath();
-      ctx.moveTo(x + i, y);
-      ctx.lineTo(x + i + h, y + h);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.16)";
-    for (var j = -h; j < w + h; j += step) {
-      ctx.beginPath();
-      ctx.moveTo(x + j, y + h);
-      ctx.lineTo(x + j + h, y);
-      ctx.stroke();
-    }
+    ctx.stroke();
+
+    // 밝은 광택 선 (입체감 효과)
+    ctx.beginPath();
+    ctx.moveTo(ix + 1, y);
+    ctx.lineTo(ix + 1, y + h);
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
     ctx.restore();
 
     roundRectPath(ctx, x, y, w, h, h / 2);
@@ -464,37 +467,44 @@
     ctx.restore();
   }
 
-  function drawGearedTopDial(ctx, x, y, r, isDark) {
+ function drawGearedTopDial(ctx, x, y, w, h, isDark) {
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
-    g.addColorStop(0, "#3d3d3f");
-    g.addColorStop(0.65, "#1c1c1e");
-    g.addColorStop(1, "#060607");
+
+    // 1. 납작하고 둥근 다이얼 몸통
+    roundRectPath(ctx, x - w / 2, y - h / 2, w, h, 2);
+    var g = ctx.createLinearGradient(x - w / 2, y, x + w / 2, y);
+    g.addColorStop(0, "#19191b");
+    g.addColorStop(0.2, "#3d3d3f");
+    g.addColorStop(0.8, "#3d3d3f");
+    g.addColorStop(1, "#19191b");
     ctx.fillStyle = g;
     ctx.fill();
-    var teeth = 28;
-    for (var t = 0; t < teeth; t++) {
-      var ta = (t / teeth) * Math.PI * 2;
-      var x1 = x + Math.cos(ta) * r * 0.86, y1 = y + Math.sin(ta) * r * 0.86;
-      var x2 = x + Math.cos(ta) * r, y2 = y + Math.sin(ta) * r;
+
+    // 2. 세로 톱니 패턴
+    var step = 3.5;
+    for (var ix = x - w / 2 + 2; ix < x + w / 2 - 1; ix += step) {
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = t % 2 === 0 ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.4)";
-      ctx.lineWidth = 1.2;
+      ctx.moveTo(ix, y - h / 2);
+      ctx.lineTo(ix, y + h / 2);
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 밝은 하이라이트 선
+      ctx.beginPath();
+      ctx.moveTo(ix + 1, y - h / 2);
+      ctx.lineTo(ix + 1, y + h / 2);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+      ctx.lineWidth = 1;
       ctx.stroke();
     }
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, r - 1.5, Math.PI * 1.05, Math.PI * 1.7);
-    ctx.strokeStyle = "rgba(255,255,255,0.22)";
-    ctx.lineWidth = 1.2;
+
+    // 3. 외곽선
+    roundRectPath(ctx, x - w / 2, y - h / 2, w, h, 2);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
     ctx.stroke();
+
     ctx.restore();
   }
 
@@ -543,7 +553,7 @@
     // strap lug (right), both low-contrast like the reference photo
     drawTopNub(ctx, bx + bw * 0.22, by - 1 * k, 22 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
     drawTopNub(ctx, bx + bw * 0.70, by - 2 * k, 18 * k, 18 * k, 0, shade(body, isDark ? 8 : -5));
-    drawGearedTopDial(ctx, bx + bw * 0.70, by + 3 * k, 15 * k, isDark);
+    drawGearedTopDial(ctx, bx + bw * 0.69, by - 2 * k, 42 * k, 8 * k, isDark);
 
     // shoulder plate — a neutral silver-grey top panel, independent of the
     // body shell color (matches the reference: the top plate reads as a
@@ -578,14 +588,14 @@
     drawLogoDot(ctx, bx + bw * 0.354, shY, bw * 0.038);
 
     // grey sensor / viewfinder window
-    var winW = bw * 0.08, winH = winW * 0.62;
+    var winW = bw * 0.11, winH = winW * 0.65; 
     drawWindow(ctx, bx + bw * 0.506 - winW / 2, shY - winH / 2, winW, winH);
 
     // chrome shutter button
     drawShutterButton(ctx, bx + bw * 0.657, shY, bw * 0.042);
 
     // red vertical status LED
-    drawStatusLED(ctx, bx + bw * 0.725, shY - L.shoulderH * 0.12, bw * 0.015, L.shoulderH * 0.25);
+    drawStatusLED(ctx, bx + bw * 0.772, shY - L.shoulderH * 0.225, bw * 0.022, L.shoulderH * 0.45);
 
     // pill-shaped waffle switch (far right of shoulder)
     drawRidgedSwitch(ctx, bx + bw * 0.851 - bw * 0.064, shY - L.shoulderH * 0.24, bw * 0.129, L.shoulderH * 0.46, body, isDark);

@@ -1147,18 +1147,14 @@ var duration = state.gifSeconds * photoCount * 1000;
   }
 
   // iOS Safari/Chrome never honor `<a download>` on blob: URLs — clicking
-  // just opens/previews the image instead of saving it. The only way to
-  // get a real "Save Image" prompt without leaving the page is the Web
-  // Share API with a File — it opens the native share sheet, which has a
-  // "Save Image" action.
-  // IMPORTANT: navigator.share() can fail silently on iOS for larger
-  // files (e.g. multi-photo videos) without throwing a distinguishable
-  // "user cancelled" error — so we can't tell a real cancel apart from a
-  // real failure. To stay safe, any rejection falls through to the
-  // direct-navigation fallback below rather than assuming success.
+  // just opens/previews the image instead of saving it, and for video
+  // files in particular, opening the blob directly (new tab / current-tab
+  // navigation) generally does NOT give a working "Save Video" long-press
+  // option the way it does for images. So on iOS the Web Share API is the
+  // only reliable save path — no direct-navigation fallback for it.
   // onResult(true) is called once the share sheet actually opens
-  // (success is then up to the user); onResult(false) means we fell back
-  // to the direct-navigation path instead.
+  // (success from there is up to the user); onResult(false) means
+  // sharing wasn't available/failed and nothing else was attempted.
   function downloadBlob(blob, filename, existingWin, onResult) {
     var ios = isIOS();
     var android = isAndroid();
@@ -1172,26 +1168,19 @@ var duration = state.gifSeconds * photoCount * 1000;
             navigator.share({ files: [iosFile] }).then(function () {
               done(true);
             }).catch(function () {
-              // Could be a real user cancel OR a silent failure (common
-              // on iOS once the file gets large) — either way, fall back
-              // to direct navigation so the user still gets a save path.
-              var iosUrl2 = URL.createObjectURL(blob);
-              window.location.href = iosUrl2;
-              setTimeout(function () { URL.revokeObjectURL(iosUrl2); }, 60000);
+              // User cancelled, or share failed — either way we do NOT
+              // fall back to opening the blob directly, since that path
+              // doesn't reliably let iOS save videos to the camera roll.
               done(false);
             });
             return;
           }
         } catch (shareErr) {
-          // fall through — no share support, nothing else we can do
-          // without opening a tab, which we're avoiding on iOS
+          // fall through — no share support at all
         }
       }
-      // Share API unavailable: last resort is direct navigation in the
-      // current tab (user can long-press the resulting image to save it).
-      var iosUrl = URL.createObjectURL(blob);
-      window.location.href = iosUrl;
-      setTimeout(function () { URL.revokeObjectURL(iosUrl); }, 60000);
+      // Share API unavailable on this browser: nothing else we can do
+      // reliably for video saves on iOS.
       done(false);
     }
 
@@ -1295,7 +1284,7 @@ var duration = state.gifSeconds * photoCount * 1000;
           statusText.textContent = isIOS()
             ? (shared
                 ? "PNG 준비 완료 — 공유창에서 '이미지 저장'을 눌러주세요."
-                : "PNG 준비 완료 — 이미지를 길게 눌러 저장해 주세요.")
+                : "공유창을 열지 못했어요. 다시 눌러 주세요.")
             : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
         });
         downloadPngBtn.disabled = false;
@@ -1778,7 +1767,7 @@ for (var i = 0; i < candidates.length; i++) {
       statusText.textContent = isIOS()
         ? (shared
             ? "동영상 준비 완료 — 공유창에서 '비디오 저장'을 눌러주세요."
-            : "동영상 준비 완료 — 새로 열린 화면에서 저장해 주세요.")
+            : "공유창을 열지 못했어요. 사진 수를 줄이거나 다시 눌러 주세요.")
         : "동영상 저장 완료 (" + vw + "×" + vh + ")";
     });
 

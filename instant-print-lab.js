@@ -1031,15 +1031,15 @@ ctx.fill();
       img.onload = function () {
         if (slot === 2) {
           state.photoImg2 = img;
-          photoStatus2.textContent = file.name + " 적용됨";
+          photoStatus2.textContent = file.name ;
         } else if (slot === 3) {
           state.photoImg3 = img;
-          photoStatus3.textContent = file.name + " 적용됨";
+          photoStatus3.textContent = file.name ;
         } else {
           state.photoImg = img;
-          photoStatus.textContent = file.name + " 적용됨";
+          photoStatus.textContent = file.name ;
         }
-        statusText.textContent = "사진이 적용되었어요. 컬러와 배율을 조정해보세요.";
+        statusText.textContent = "PRINTING PHOTOS...";
         render();
       };
       img.src = e.target.result;

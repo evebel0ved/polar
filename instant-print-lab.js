@@ -871,57 +871,6 @@ ctx.fill();
       return size;
     }
 
-    // Matches genuine color emoji (grapheme clusters with an
-    // Emoji_Presentation codepoint, or any codepoint immediately
-    // followed by the U+FE0F "emoji" variation selector, incl. ZWJ
-    // sequences like family/flag emoji) — but NOT plain text symbols
-    // like ★ or ♥ typed without a variation selector, which render as
-    // ordinary glyphs in the caption font and should follow fillStyle.
-    var EMOJI_RE = /[\u{1F1E6}-\u{1F1FF}]{2}|\p{Emoji_Presentation}(?:\uFE0F)?(?:\u200D\p{Emoji_Presentation}(?:\uFE0F)?)*|.\uFE0F/gu;
-
-    // Draws `text` left-to-right starting at (x, y), splitting it into
-    // emoji runs (drawn with the system's own emoji font, so they keep
-    // their native color regardless of fillStyle) and non-emoji runs
-    // (drawn with fontPrefix + family, so ★ ♥ etc. follow fillStyle
-    // like normal text). fontPrefix is everything in a CSS font string
-    // before the family list, e.g. "600 14px ". Returns the total width
-    // drawn, so callers can right-align/rotate the whole block by
-    // translating first.
-    function fillMixedText(ctx, text, x, y, fontPrefix, family, fillStyle) {
-      var savedAlign = ctx.textAlign;
-      ctx.textAlign = "left";
-      var parts = [];
-      var lastIndex = 0;
-      var m;
-      EMOJI_RE.lastIndex = 0;
-      while ((m = EMOJI_RE.exec(text))) {
-        if (m.index > lastIndex) parts.push({ t: text.slice(lastIndex, m.index), emoji: false });
-        parts.push({ t: m[0], emoji: true });
-        lastIndex = m.index + m[0].length;
-      }
-      if (lastIndex < text.length) parts.push({ t: text.slice(lastIndex), emoji: false });
-
-      var cursorX = x;
-      ctx.fillStyle = fillStyle;
-      for (var pi = 0; pi < parts.length; pi++) {
-        var part = parts[pi];
-        // System emoji fonts (Apple Color Emoji, Segoe UI Emoji, Noto
-        // Color Emoji, …) ignore fillStyle entirely and always paint
-        // their own built-in colors — listed first (ahead of `family`)
-        // only for emoji runs, so those glyphs stay colorful instead of
-        // falling back to the caption font's plain fillStyle-colored
-        // glyph, if it even has one, while plain-text runs still use
-        // `family` alone and follow fillStyle normally.
-        ctx.font = part.emoji
-          ? fontPrefix + "'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Segoe UI Symbol'," + family
-          : fontPrefix + family;
-        ctx.fillText(part.t, cursorX, y);
-        cursorX += ctx.measureText(part.t).width;
-      }
-      ctx.textAlign = savedAlign;
-      return cursorX - x;
-    }
-
     if (dims.side === "right") {
       // vertical margin strip on the right
       var mCenterX = left + dims.w - dims.margin / 2;
@@ -937,7 +886,10 @@ ctx.fill();
       ctx.save();
       ctx.translate(mCenterX, top + dims.h - 26);
       ctx.rotate(-Math.PI / 2);
-      fillMixedText(ctx, caption, 0, 0, "600 " + captionSize + "px ", "'Space Grotesk', sans-serif", "#5b5850");
+      ctx.textAlign = "left";
+      ctx.font = "600 " + captionSize + "px 'Space Grotesk', sans-serif";
+      ctx.fillStyle = "#5b5850";
+      ctx.fillText(caption, 0, 0);
       ctx.restore();
     } else {
       var bottomHalfW = dims.w / 2 - pad - 6;
@@ -948,12 +900,10 @@ ctx.fill();
       ctx.fillText(serial, left + pad, top + dims.h - dims.margin + 40);
 
       var captionSizeB = fitFontSize(ctx, caption, "'Space Grotesk', sans-serif", 15, bottomHalfW);
-      var captionFontPrefixB = "600 " + captionSizeB + "px ";
-      ctx.font = captionFontPrefixB + "'Space Grotesk', sans-serif";
-      var captionWidthB = ctx.measureText(caption).width;
-      var captionRightX = left + dims.w - pad;
-      fillMixedText(ctx, caption, captionRightX - captionWidthB,
-        top + dims.h - dims.margin + 40, captionFontPrefixB, "'Space Grotesk', sans-serif", "#5b5850");
+      ctx.textAlign = "right";
+      ctx.font = "600 " + captionSizeB + "px 'Space Grotesk', sans-serif";
+      ctx.fillStyle = "#5b5850";
+      ctx.fillText(caption, left + dims.w - pad, top + dims.h - dims.margin + 40);
     }
 
     ctx.restore(); // closes the outer stack-rotation save opened above

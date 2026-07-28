@@ -1733,8 +1733,19 @@ var offset =
                 var minRecordMs = animFrameCount * frameIntervalMs + holdFrameCount * frameIntervalMs;
                 var extraWait = Math.max(300, minRecordMs - elapsed + 300);
                 setTimeout(function () {
-                  if (recorder.state !== "inactive") recorder.stop();
-                }, extraWait);
+  if (recorder.state !== "inactive") {
+    try {
+      recorder.requestData();   // 마지막 청크 강제 생성
+    } catch (e) {}
+
+    setTimeout(function () {
+      if (recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    }, 500); // 마지막 프레임이 인코더에 들어갈 시간 확보
+  }
+}, extraWait);
+                
               }
             }
             requestAnimationFrame(tick);

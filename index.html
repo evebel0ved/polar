@@ -157,6 +157,38 @@ button.ghost{border-color:var(--line);color:var(--ink-soft);background:transpare
 .field-group:last-child{margin-bottom:0;}
 .field-group > .eyebrow{display:block;margin-bottom:9px;}
 
+.field-group summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  list-style:none;
+  margin-bottom:9px;
+  cursor:default;
+  -webkit-tap-highlight-color:transparent;
+}
+.field-group summary::-webkit-details-marker{display:none;}
+.field-group summary .eyebrow{margin-bottom:0;}
+.field-group summary .chevron{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:32px;
+  height:32px;
+  flex-shrink:0;
+  margin-left:10px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--panel);
+  color:var(--ink-soft);
+  font-size:16px;
+  line-height:1;
+  cursor:pointer;
+  transition:transform .15s ease, background .15s ease;
+}
+.field-group summary .chevron:hover{background:#f0efec;color:var(--ink);}
+.field-group[open] summary .chevron{transform:rotate(180deg);}
+.field-group .group-body{padding-top:2px;}
+
 .upload-row{
   display:flex;
   gap:8px;
@@ -320,17 +352,20 @@ label.check input{accent-color:var(--accent);}
     <h2>CONTROL SHEET</h2>
     <p class="lede">모든 설정은 실시간으로 미리보기에 반영되고, 저장되는 파일도 미리보기와 동일한 구도로 출력됩니다.</p>
 
-    <div class="field-group">
-      <span class="eyebrow">01 · 사진 업로드</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">01 · 사진 업로드</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="upload-row">
         <input id="photoInput" type="file" accept="image/*">
         <button type="button" class="block" id="pickPhoto">사진 선택하기</button>
       </div>
       <p class="upload-note" id="photoStatus">선택된 사진 없음</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">02 · 추가 사진 (GIF·동영상 전용)</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">02 · 추가 사진 (GIF·동영상 전용)</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="upload-row">
         <input id="photoInput2" type="file" accept="image/*">
         <button type="button" class="block" id="pickPhoto2">두 번째 사진</button>
@@ -342,56 +377,71 @@ label.check input{accent-color:var(--accent);}
       </div>
       <p class="upload-note" id="photoStatus3">선택된 사진 없음</p>
       <p class="upload-note">PNG 저장에는 첫 번째 사진만 사용돼요. GIF·동영상 저장 시 첫 번째 사진 위로 다음 사진이 차례로 출력됩니다.</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">03 · 카메라 컬러</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">03 · 카메라 컬러</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="swatch-grid" id="cameraSwatchGrid"></div>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">04 · 배경</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">04 · 배경</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="swatch-grid" id="bgSwatchGrid"></div>
       <p class="upload-note">배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">05 · 출력 방향</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">05 · 출력 방향</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="toggle-row">
-        <button type="button" class="toggle-btn is-active" id="orientVertical">세로</button>
-        <button type="button" class="toggle-btn" id="orientHorizontal">가로</button>
+        <button type="button" class="toggle-btn" id="orientVertical">세로</button>
+        <button type="button" class="toggle-btn is-active" id="orientHorizontal">가로</button>
       </div>
       <p class="upload-note">가로 출력은 흰 여백이 사진 오른쪽에 놓이고 캔버스 상하 길이가 줄어들어요. 세로 출력은 캔버스가 정사각형이 됩니다.</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">06 · 출력 문구</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">06 · 출력 문구</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <input type="text" class="text-input" id="captionInput" maxlength="40" value="INSTANT" placeholder="예: INSTANT (비워두면 공백으로 출력)">
       <p class="upload-note">폴라로이드 흰 여백에 들어가는 문구를 자유롭게 바꿀 수 있어요. 비워두면 문구 없이 출력돼요.</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">07 · 시리얼 넘버</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">07 · 시리얼 넘버</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <input type="text" class="text-input" id="serialInput" maxlength="14" value="N° 01" placeholder="예: N° 01 (비워두면 공백으로 출력)">
       <p class="upload-note">여백에 작게 들어가는 "N° 01" 문구를 자유롭게 바꿀 수 있어요. 숫자로 끝나면 추가 사진마다 번호가 자동으로 하나씩 올라가요. 비워두면 문구 없이 출력돼요.</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">08 · 출력 해상도 배율</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">08 · 출력 해상도 배율</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="range-row">
         <input id="scaleRange" type="range" min="2" max="8" step="1" value="6">
         <span class="val" id="scaleVal">×6</span>
       </div>
       <p class="upload-note">PNG는 이 배율로 저장돼요. 어떤 화면에서 열어도 동일한 구도·비율로 저장됩니다.</p>
-    </div>
+      </div>
+    </details>
 
-    <div class="field-group">
-      <span class="eyebrow">09 · GIF·동영상 배출 애니메이션</span>
+    <details class="field-group" open>
+      <summary><span class="eyebrow">09 · GIF·동영상 배출 애니메이션</span><span class="chevron">▾</span></summary>
+      <div class="group-body">
       <div class="range-row">
         <input id="gifRange" type="range" min="0.8" max="3" step="0.1" value="1.4">
         <span class="val" id="gifVal">1.4s</span>
       </div>
-    </div>
+      </div>
+    </details>
 
     <hr class="divider">
 
@@ -405,6 +455,18 @@ label.check input{accent-color:var(--accent);}
   </aside>
 </div>
 
+<script>
+// summary(헤더) 전체가 아니라 화살표(.chevron)를 눌렀을 때만 접고 펼치도록 함.
+// <summary> 클릭의 기본 토글 동작을 막고, 화살표 클릭 시에만 details.open을 반전시킴.
+document.querySelectorAll('.field-group > summary').forEach(function (summary) {
+  summary.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (e.target.closest('.chevron')) {
+      summary.parentElement.open = !summary.parentElement.open;
+    }
+  });
+});
+</script>
 <script src="instant-print-lab.js"></script>
 </body>
 </html>

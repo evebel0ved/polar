@@ -1103,11 +1103,11 @@ ctx.fill();
       if (rafId) cancelAnimationFrame(rafId);
       state.phase = 1;
       render();
-      playPreviewBtn.textContent = "▶ 배출 애니메이션 미리보기";
+      playPreviewBtn.textContent = "▶ 애니메이션 미리보기";
       return;
     }
     state.playing = true;
-    playPreviewBtn.textContent = "■ 정지";
+    playPreviewBtn.textContent = "■ STOP";
     var photoCount = 1
   + (state.photoImg2 ? 1 : 0)
   + (state.photoImg3 ? 1 : 0);

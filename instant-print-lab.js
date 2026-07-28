@@ -268,15 +268,11 @@
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
-    // At full eject (e=1) the card's right edge now lands almost flush
-    // with the canvas's right edge (small fixed margin only), instead of
-    // stopping level with the camera body. STACK_MAX_X_OFFSET reserves
-    // room for the 2nd/3rd stacked photo's rightward scatter offset (see
-    // stackOffsetFor) so a stacked card's right edge still stays inside
-    // the canvas rather than clipping off it.
-    var STACK_MAX_X_OFFSET = 22;
-    var CANVAS_EDGE_MARGIN = 24;
-    var endX = W - cardW - CANVAS_EDGE_MARGIN - STACK_MAX_X_OFFSET;
+    // At full eject (e=1) the card stays anchored right at the camera
+    // body's edge (small overlap so it visually connects to the camera
+    // rather than floating away from it) — only the card's own size
+    // (CARD_DIMS.horizontal) was reduced, not how far it travels.
+    var endX = rightEdge - 20;
     return lerp(startX, endX, e);
   }
 

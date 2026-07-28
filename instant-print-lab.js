@@ -46,7 +46,7 @@
     cameraColorIndex: 0,
     bgColorIndex: 0,
     bgMode: "color",
-    orientation: "horizontal", // "vertical" | "horizontal" — horizontal is now default
+    orientation: "vertical", //   "horizontal"
     captionText: "INSTANT",
     serialText: "N° 01",       // customizable frame-number label printed on the card margin
     photoImg: null,

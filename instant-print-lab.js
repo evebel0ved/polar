@@ -1731,7 +1731,7 @@ var offset =
                 // longer to catch up on slower devices.
                 var elapsed = performance.now() - startedAt;
                 var minRecordMs = animFrameCount * frameIntervalMs + holdFrameCount * frameIntervalMs;
-                var extraWait = Math.max(300, minRecordMs - elapsed + 300);
+                var extraWait = Math.max(1200, minRecordMs - elapsed + 1200);
                 setTimeout(function () {
   if (recorder.state !== "inactive") {
     try {
@@ -1742,7 +1742,7 @@ var offset =
       if (recorder.state !== "inactive") {
         recorder.stop();
       }
-    }, 500); // 마지막 프레임이 인코더에 들어갈 시간 확보
+    }, 1000); // 마지막 프레임이 인코더에 들어갈 시간 확보
   }
 }, extraWait);
                 

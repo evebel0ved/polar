@@ -1182,22 +1182,21 @@ var duration = state.gifSeconds * photoCount * 1000;
     }
 
     if (android) {
-      if (navigator.canShare && window.File) {
-        try {
-          var file = new File([blob], filename, { type: blob.type || "image/png" });
-          if (navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file] }).then(function () {
-              if (existingWin) { try { existingWin.close(); } catch (e) {} }
-            }).catch(function () {
-              openBlobInNewTab(blob, existingWin);
-            });
-            return;
-          }
-        } catch (shareErr) {
-          // fall through to the tab fallback below
-        }
-      }
-      openBlobInNewTab(blob, existingWin);
+      // Straight to a normal download, same as desktop — no share sheet,
+      // no new tab. Modern Chrome/Android handles <a download> on blob:
+      // URLs fine and drops the file directly into Downloads.
+      if (existingWin) { try { existingWin.close(); } catch (e) {} }
+      var androidUrl = URL.createObjectURL(blob);
+      var androidA = document.createElement("a");
+      androidA.href = androidUrl;
+      androidA.download = filename;
+      androidA.rel = "noopener";
+      document.body.appendChild(androidA);
+      androidA.click();
+      setTimeout(function () {
+        androidA.remove();
+        URL.revokeObjectURL(androidUrl);
+      }, 10000);
       return;
     }
 
@@ -1216,23 +1215,6 @@ var duration = state.gifSeconds * photoCount * 1000;
     }, 10000);
   }
 
-  // Navigates an already-open tab to the blob so the user can long-press
-  // → Save Image. The tab MUST have been opened synchronously inside the
-  // original click handler (see downloadPngBtn) — opening one here, after
-  // an async render/toBlob/share step, gets blocked by iOS Safari's
-  // popup blocker.
-  function openBlobInNewTab(blob, existingWin) {
-    var url = URL.createObjectURL(blob);
-    if (existingWin && !existingWin.closed) {
-      existingWin.location.href = url;
-    } else {
-      // No usable pre-opened tab (popup was blocked, or Share API path
-      // never received one) — last resort, navigate this tab directly.
-      window.location.href = url;
-    }
-    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-  }
-
   // Many Android WebViews (KakaoTalk/Instagram in-app browsers especially)
   // silently fail to rasterize very large canvases — toBlob() returns a
   // "successful" but blank/black image instead of throwing an error. This
@@ -1244,17 +1226,11 @@ var duration = state.gifSeconds * photoCount * 1000;
     downloadPngBtn.disabled = true;
     statusText.textContent = "PNG 렌더링 중… (×" + state.scale + ")";
 
-    // On Android, a blank tab is pre-opened synchronously here (before the
-    // async render/toBlob), since some in-app browsers there lack file
-    // sharing and need the new-tab long-press fallback — and window.open()
-    // must happen inside the original click gesture or it gets blocked.
-    // iOS relies solely on the Web Share API (see downloadBlob), so no tab
-    // is opened for it at all.
+    // iOS relies solely on the Web Share API (see downloadBlob); Android
+    // now goes straight to a normal <a download> — neither needs a
+    // pre-opened tab.
     var mobile = isIOS() || isAndroid();
     var preOpenedWin = null;
-    if (isAndroid()) {
-      preOpenedWin = window.open("", "_blank");
-    }
 
     setTimeout(function () {
       var scale = state.scale;
@@ -1302,9 +1278,7 @@ var duration = state.gifSeconds * photoCount * 1000;
         downloadBlob(blob, "instant-print-card.png", preOpenedWin);
         statusText.textContent = isIOS()
           ? "PNG 준비 완료 — 공유창에서 '이미지 저장'을 눌러주세요."
-          : mobile
-            ? "PNG 준비 완료 — 새 탭/공유창에서 이미지를 저장하세요."
-            : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
+          : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
         downloadPngBtn.disabled = false;
       }, "image/png");
     }, 30);

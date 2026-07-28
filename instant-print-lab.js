@@ -47,7 +47,7 @@
     photoImg: null,
     photoImg2: null,           // 2nd photo — only used for video (stacks on top of photo 1)
     photoImg3: null,           // 3rd photo — only used for video (stacks on top of photo 2)
-    scale: 5,
+    scale: 6,
     gifSeconds: 3,
     phase: 1,
     playing: false
@@ -154,7 +154,7 @@
   // Scene layout
   // ---------------------------------------------------------------------
 
-  var VERTICAL_MARGIN = 250;
+  var VERTICAL_MARGIN = 180;
 
   var CARD_DIMS = {
    
@@ -928,16 +928,10 @@ ctx.fill();
   }
 
 
-  function stackOffsetFor(i, orientation) {
+  function stackOffsetFor(i) {
     if (i === 0) return { x: 0, y: 0, rot: 0 };
     var dir = i % 2 === 1 ? 1 : -1;
-    var y = i * 8;
-    // Horizontal orientation only: pull the 3rd stacked photo (i === 2)
-    // further up than the shared y*8 formula would, per request — 1st
-    // and 2nd photos, and every offset in vertical orientation, are
-    // untouched.
-    if (orientation === "horizontal" && i === 2) y = i * 8 - 14;
-    return { x: dir * (10 + i * 4), y: y, rot: dir * (3 + i * 1.5) };
+    return { x: dir * (10 + i * 4), y: i * 8, rot: dir * (3 + i * 1.5) };
   }
 
   
@@ -969,7 +963,7 @@ ctx.fill();
     for (var i = 0; i <= pos.idx; i++) {
       var e = (i < pos.idx) ? 1 : pos.localE;
       drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
-        serialForIndex(st.serialText, i), L, stackOffsetFor(i, st.orientation));
+        serialForIndex(st.serialText, i), L, stackOffsetFor(i));
     }
     drawCamera(ctx, cameraColorDef, L);
   }
@@ -1128,7 +1122,7 @@ var duration = state.gifSeconds * photoCount * 1000;
         rafId = requestAnimationFrame(tick);
       } else {
         state.playing = false;
-        playPreviewBtn.textContent = "▶ MOTION PREVIEW";
+        playPreviewBtn.textContent = "▶ 배출 애니메이션 미리보기";
       }
     }
     rafId = requestAnimationFrame(tick);
@@ -1137,74 +1131,7 @@ var duration = state.gifSeconds * photoCount * 1000;
   // ---------------------------------------------------------------------
   // PNG export — same composition, rendered at N× resolution
   // ---------------------------------------------------------------------
-  function isIOS() {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  }
-
-  function isAndroid() {
-    return /Android/.test(navigator.userAgent);
-  }
-
-  // iOS Safari/Chrome never honor `<a download>` on blob: URLs — clicking
-  // just opens/previews the image instead of saving it, and for video
-  // files in particular, opening the blob directly (new tab / current-tab
-  // navigation) generally does NOT give a working "Save Video" long-press
-  // option the way it does for images. So on iOS the Web Share API is the
-  // only reliable save path — no direct-navigation fallback for it.
-  // onResult(true) is called once the share sheet actually opens
-  // (success from there is up to the user); onResult(false) means
-  // sharing wasn't available/failed and nothing else was attempted.
-  function downloadBlob(blob, filename, existingWin, onResult) {
-    var ios = isIOS();
-    var android = isAndroid();
-    function done(shared) { if (onResult) onResult(shared); }
-
-    if (ios) {
-      if (navigator.canShare && window.File) {
-        try {
-          var iosFile = new File([blob], filename, { type: blob.type || "image/png" });
-          if (navigator.canShare({ files: [iosFile] })) {
-            navigator.share({ files: [iosFile] }).then(function () {
-              done(true);
-            }).catch(function () {
-              // User cancelled, or share failed — either way we do NOT
-              // fall back to opening the blob directly, since that path
-              // doesn't reliably let iOS save videos to the camera roll.
-              done(false);
-            });
-            return;
-          }
-        } catch (shareErr) {
-          // fall through — no share support at all
-        }
-      }
-      // Share API unavailable on this browser: nothing else we can do
-      // reliably for video saves on iOS.
-      done(false);
-    }
-
-    if (android) {
-      // Straight to a normal download, same as desktop — no share sheet,
-      // no new tab. Modern Chrome/Android handles <a download> on blob:
-      // URLs fine and drops the file directly into Downloads.
-      if (existingWin) { try { existingWin.close(); } catch (e) {} }
-      var androidUrl = URL.createObjectURL(blob);
-      var androidA = document.createElement("a");
-      androidA.href = androidUrl;
-      androidA.download = filename;
-      androidA.rel = "noopener";
-      document.body.appendChild(androidA);
-      androidA.click();
-      setTimeout(function () {
-        androidA.remove();
-        URL.revokeObjectURL(androidUrl);
-      }, 10000);
-      done(true);
-      return;
-    }
-
-    // Desktop browsers: the classic <a download> approach works fine.
+  function downloadBlob(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
@@ -1212,81 +1139,30 @@ var duration = state.gifSeconds * photoCount * 1000;
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
-
+  
     setTimeout(function () {
       a.remove();
       URL.revokeObjectURL(url);
     }, 10000);
-    done(true);
   }
-
-  // Many Android WebViews (KakaoTalk/Instagram in-app browsers especially)
-  // silently fail to rasterize very large canvases — toBlob() returns a
-  // "successful" but blank/black image instead of throwing an error. This
-  // caps the exported pixel count to a size those engines can reliably
-  // handle, only on mobile — desktop keeps full requested resolution.
-  var MOBILE_MAX_EXPORT_PIXELS = 16 * 1000 * 1000; // ~16MP safety ceiling
 
   downloadPngBtn.addEventListener("click", function () {
     downloadPngBtn.disabled = true;
     statusText.textContent = "PNG 렌더링 중… (×" + state.scale + ")";
-
-    // iOS relies solely on the Web Share API (see downloadBlob); Android
-    // now goes straight to a normal <a download> — neither needs a
-    // pre-opened tab.
-    var mobile = isIOS() || isAndroid();
-    var preOpenedWin = null;
-
     setTimeout(function () {
       var scale = state.scale;
-      var pxW = W * scale, pxH = H * scale;
-
-      if (mobile) {
-        var totalPx = pxW * pxH;
-        if (totalPx > MOBILE_MAX_EXPORT_PIXELS) {
-          var shrink = Math.sqrt(MOBILE_MAX_EXPORT_PIXELS / totalPx);
-          scale = Math.max(1, Math.floor(scale * shrink));
-          pxW = W * scale; pxH = H * scale;
-        }
-      }
-
       var off = document.createElement("canvas");
-      off.width = pxW;
-      off.height = pxH;
+      off.width = W * scale;
+      off.height = H * scale;
       var octx = off.getContext("2d");
       octx.scale(scale, scale);
       // PNG only ever shows the first photo — the 2nd/3rd stack is a
       // GIF/video-only feature
       var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
       renderScene(octx, 1, pngState);
-
-      // Guard against the silent-blank-canvas failure mode: sample a few
-      // pixels and bail out with a visible error (instead of "succeeding"
-      // with an all-black image) if the draw clearly didn't happen.
-      var probe = octx.getImageData(0, 0, Math.min(4, off.width), Math.min(4, off.height)).data;
-      var allZero = true;
-      for (var pi = 0; pi < probe.length; pi++) { if (probe[pi] !== 0) { allZero = false; break; } }
-      if (allZero) {
-        statusText.textContent = "이 브라우저에서는 고해상도 PNG를 만들 수 없어요. 화질(×배수)을 낮춰서 다시 시도해 주세요.";
-        if (preOpenedWin) { try { preOpenedWin.close(); } catch (e) {} }
-        downloadPngBtn.disabled = false;
-        return;
-      }
-
       off.toBlob(function (blob) {
-        if (!blob) {
-          statusText.textContent = "PNG 저장 중 오류가 발생했어요. 화질(×배수)을 낮춰서 다시 시도해 주세요.";
-          if (preOpenedWin) { try { preOpenedWin.close(); } catch (e) {} }
-          downloadPngBtn.disabled = false;
-          return;
-        }
-        downloadBlob(blob, "instant-print-card.png", preOpenedWin, function (shared) {
-          statusText.textContent = isIOS()
-            ? (shared
-                ? "PNG 준비 완료 — 공유창에서 '이미지 저장'을 눌러주세요."
-                : "공유창을 열지 못했어요. 다시 눌러 주세요.")
-            : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
-        });
+        downloadBlob(blob, "instant-print-card.png");
+        statusText.textContent = "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
         downloadPngBtn.disabled = false;
       }, "image/png");
     }, 30);
@@ -1700,20 +1576,12 @@ var offset =
 
         var fps = 30;
         var stream, track = null, manualFrames = false;
-        // track.requestFrame() (manual-frame pushing) is unreliable on
-        // Android — the recorder there often ignores the pushed frames
-        // and just ends up encoding a near-empty ~1s stream. Force the
-        // standard captureStream(fps) path there instead, where the
-        // browser pulls frames on its own timer and actually respects
-        // the animation loop below.
-        if (!isAndroid()) {
-          try {
-            stream = off.captureStream(0);
-            track = stream.getVideoTracks && stream.getVideoTracks()[0];
-            manualFrames = !!(track && typeof track.requestFrame === "function");
-          } catch (probeErr) {
-            manualFrames = false;
-          }
+        try {
+          stream = off.captureStream(0);
+          track = stream.getVideoTracks && stream.getVideoTracks()[0];
+          manualFrames = !!(track && typeof track.requestFrame === "function");
+        } catch (probeErr) {
+          manualFrames = false;
         }
         if (!manualFrames) {
           stream = off.captureStream(fps);
@@ -1757,19 +1625,10 @@ for (var i = 0; i < candidates.length; i++) {
       type: actualType
     });
 
-    if (!blob.size) {
-      statusText.textContent = "동영상 저장 중 오류가 발생했어요. 사진 수를 줄이거나 화질을 낮춰서 다시 시도해 주세요.";
-      resetVideoButtons();
-      return;
-    }
+    downloadBlob(blob, "polaroid." + ext);
 
-    downloadBlob(blob, "polaroid." + ext, null, function (shared) {
-      statusText.textContent = isIOS()
-        ? (shared
-            ? "동영상 준비 완료 — 공유창에서 '비디오 저장'을 눌러주세요."
-            : "공유창을 열지 못했어요. 사진 수를 줄이거나 다시 눌러 주세요.")
-        : "동영상 저장 완료 (" + vw + "×" + vh + ")";
-    });
+    statusText.textContent =
+      "동영상 저장 완료 (" + vw + "×" + vh + ")";
 
   } catch (errStop) {
     console.error(errStop);
@@ -1817,11 +1676,7 @@ var animMs = state.gifSeconds * photoCount * 1000;
           } else {
             renderScene(octx, 1, videoExportState);
             if (manualFrames) track.requestFrame();
-            // Give the encoder enough headroom to flush the final frames
-            // before stopping — too short a delay here is part of why
-            // the standard captureStream(fps) path (used on Android)
-            // can end up truncating the tail of the recording.
-            setTimeout(function () { recorder.stop(); }, manualFrames ? 60 : 250);
+            setTimeout(function () { recorder.stop(); }, 60);
           }
         }
         requestAnimationFrame(tick);

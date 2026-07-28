@@ -177,7 +177,7 @@
   // noticeably more breathing room around the camera+card group (the
   // square canvas side length in applyOrientationDims grows with this,
   // so margins scale directly with this one constant).
-  var VERTICAL_MARGIN = 90;
+  var VERTICAL_MARGIN = 180;
 
   var CARD_DIMS = {
     // vertical card is narrower than the (now bigger) camera body so the

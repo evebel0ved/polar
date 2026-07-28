@@ -413,7 +413,7 @@
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(leverAngle);
-    var leverW = r * 0.34, leverLen = r * 0.62, leverBase = r * 0.68;
+    var leverW = r * 0.42, leverLen = r * 0.48, leverBase = r * 0.68;
     roundRectPath(ctx, -leverW / 2, -(leverBase + leverLen), leverW, leverLen + leverW / 2, leverW / 2);
     var leverGrad = ctx.createLinearGradient(-leverW / 2, 0, leverW / 2, 0);
     leverGrad.addColorStop(0, "#404244");
@@ -678,8 +678,8 @@
     // so neither shape overlaps the body's border stroke, widened, and
     // the right-hand dial moved further right and away from the button
     // below it.
-    drawTopNub(ctx, bx + bw * 0.22, by - 11 * k, 34 * k, 10 * k, 0, shade(body, isDark ? 8 : -5));
-    drawGearedTopDial(ctx, bx + bw * 0.78, by - 11 * k, 60 * k, 8 * k, isDark);
+    drawTopNub(ctx, bx + bw * 0.22, by - 10.5 * k, 34 * k, 10 * k, 0, shade(body, isDark ? 8 : -5));
+    drawGearedTopDial(ctx, bx + bw * 0.78, by - 10.5 * k, 60 * k, 8 * k, isDark);
 
     // shoulder plate — a neutral silver-grey top panel, independent of the
     // body shell color (matches the reference: the top plate reads as a

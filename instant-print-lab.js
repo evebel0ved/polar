@@ -52,7 +52,7 @@
     photoImg2: null,           // 2nd photo — only used for GIF/video (stacks on top of photo 1)
     photoImg3: null,           // 3rd photo — only used for GIF/video (stacks on top of photo 2)
     scale: 6,
-    gifSeconds: 2.4,
+    gifSeconds: 3,
     phase: 1,
     playing: false
   };
@@ -185,12 +185,13 @@
     // on cameraCenter(). Height chosen (with that anchor) so even the
     // 3rd stacked photo's stack.y offset + drop shadow stay inside
     // L.bodyY..L.bodyY+L.bodyH — never pokes out past the camera body.
-    // Width widened again (380 -> 620) so the fully-ejected card reaches
-    // almost to the canvas's right edge, per request — its left edge
-    // still overlaps the camera body (see cardLeftAt's endX), so the
-    // card visually stays attached to/emerging from the camera rather
-    // than floating away from it.
-    horizontal: { w: 620, h: 300, side: "right",  margin: 76 }
+    // `w` here is just a fallback: drawPhotoCard now computes the actual
+    // horizontal card width dynamically (see the availW calc there) so
+    // the fully-ejected card's right edge sits exactly L.bodyX in from
+    // the canvas's right edge — the same margin the camera body already
+    // has on the left — instead of a fixed width that could leave
+    // mismatched left/right canvas margins.
+    horizontal: { w: 440, h: 300, side: "right",  margin: 76 }
   };
 
   // horizontal (landscape) layout — card ejects sideways from under the
@@ -273,24 +274,25 @@
 
   // horizontal orientation: card slides out sideways from under the
   // camera body's right edge.
-  // Start position (e=0) is exactly flush with the camera's right edge
-  // (startX + cardW === rightEdge) so the card's right edge never pokes
-  // out past the camera before the animation begins — combined with the
-  // hard clip in drawPhotoCard (x <= rightEdge), this guarantees nothing
-  // is visible at the very start of the eject.
-  // End position (e=1) keeps a small overlap with the camera body (so
-  // the card still reads as attached to/emerging from it) while
-  // extending the card almost to the canvas's right edge.
+  // Start position (e=0) tucks the card's right edge SHADOW_CLEARANCE
+  // inside the camera's right edge (rather than exactly flush with it),
+  // because drawPhotoCard's drop-shadow (shadowOffsetX 14 + shadowBlur
+  // 32) spreads visibly past the card's own fill — flush positioning
+  // left a sliver of shadow poking out past the camera at the very
+  // start of the eject even though the card fill itself was fully
+  // hidden. This clearance guarantees fill AND shadow are both fully
+  // behind the camera at e=0.
+  // End position (e=1) overlaps the camera body by CARD_OVERLAP (so the
+  // card still reads as attached to/emerging from it) while its width
+  // (computed in drawPhotoCard) makes the right edge land L.bodyX in
+  // from the canvas's right edge — the same margin the camera keeps on
+  // the left, so left/right canvas margins end up equal.
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
-    var startX = rightEdge - cardW;
-    // Small overlap (20px) keeps the card's left portion tucked under
-    // the camera body at full eject, same overlap style vertical uses
-    // at its bottom edge — CANVAS_EDGE_MARGIN keeps a bit of breathing
-    // room instead of touching the canvas's true edge.
-    var CANVAS_EDGE_MARGIN = 40;
-    var endX = Math.min(rightEdge - 20, W - cardW - CANVAS_EDGE_MARGIN);
-    endX = Math.max(endX, startX);
+    var CARD_OVERLAP = 20;
+    var SHADOW_CLEARANCE = 50;
+    var startX = rightEdge - cardW - SHADOW_CLEARANCE;
+    var endX = rightEdge - CARD_OVERLAP;
     return lerp(startX, endX, e);
   }
 
@@ -880,7 +882,18 @@ ctx.fill();
       var STACK_MAX_Y_OFFSET = 24;
       var SHADOW_MARGIN = 14;
       var availH = (L.bodyY + L.bodyH) - (L.bodyY + L.shoulderH) - STACK_MAX_Y_OFFSET - SHADOW_MARGIN;
-      dims = Object.assign({}, dims, { h: Math.max(160, availH) });
+      // Card width is derived so the fully-ejected card's right edge
+      // lands exactly L.bodyX in from the canvas's right edge — i.e.
+      // the same margin the camera body already keeps on the left,
+      // mirrored on the right, rather than a fixed width that could
+      // leave mismatched left/right canvas margins. The card's left
+      // edge overlaps the camera body by CARD_OVERLAP (kept in sync
+      // with cardLeftAt's own overlap amount) so it still reads as
+      // attached to the camera.
+      var CARD_OVERLAP = 20;
+      var rightEdge = L.bodyX + L.bodyW;
+      var availW = (W - L.bodyX) - (rightEdge - CARD_OVERLAP);
+      dims = Object.assign({}, dims, { h: Math.max(160, availH), w: Math.max(200, availW) });
       top = L.bodyY + L.shoulderH;
       left = cardLeftAt(e, dims.w, L);
     }
@@ -907,17 +920,6 @@ ctx.fill();
       // body's top edge.
       ctx.beginPath();
       ctx.rect(0, L.bodyY, W, H - L.bodyY);
-      ctx.clip();
-    } else {
-      // Mirrors the vertical clip above, at the camera body's left edge
-      // this time: nothing drawn for this card (fill OR its drop-shadow)
-      // can render to the left of L.bodyX. The card ejects rightward, so
-      // its "still hidden inside the camera" portion is on the left —
-      // this guarantees no part of the card (or its shadow) ever shows
-      // past the camera body's left edge, however far right stack.x
-      // pushes an offset card.
-      ctx.beginPath();
-      ctx.rect(L.bodyX, 0, W - L.bodyX, H);
       ctx.clip();
     }
     if (stack.rot) {
@@ -1232,6 +1234,16 @@ ctx.fill();
     state.gifSeconds = parseFloat(gifRange.value);
     gifVal.textContent = state.gifSeconds.toFixed(1) + "s";
   });
+
+  // Output-duration range widened to 1s–7s (default 3s), set directly
+  // here rather than relying on the range input's static HTML
+  // min/max/value attributes, so the slider always reflects these
+  // bounds regardless of what's in the markup.
+  gifRange.min = "1";
+  gifRange.max = "7";
+  gifRange.step = "0.1";
+  gifRange.value = String(state.gifSeconds);
+  gifVal.textContent = state.gifSeconds.toFixed(1) + "s";
 
   // preview animation (visible canvas only — not exported)
   var rafId = null;

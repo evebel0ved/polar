@@ -711,7 +711,7 @@
     ctx.restore();
     
     // red logo dot — moved left (closer to the wordmark) from 0.354 to 0.27
-    drawLogoDot(ctx, bx + bw * 0.27, shY, bw * 0.038);
+    drawLogoDot(ctx, bx + bw * 0.27 + 10, shY, bw * 0.038);
 
     // grey sensor / viewfinder window
     var winW = bw * 0.11, winH = winW * 0.65; 

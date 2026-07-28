@@ -185,7 +185,12 @@
     // on cameraCenter(). Height chosen (with that anchor) so even the
     // 3rd stacked photo's stack.y offset + drop shadow stay inside
     // L.bodyY..L.bodyY+L.bodyH — never pokes out past the camera body.
-    horizontal: { w: 480, h: 380, side: "right",  margin: 92 }
+    // horizontal card size reduced (480x380 -> 380x300, same ratio) so
+    // the ejected photo reads smaller relative to the camera body, per
+    // request — paired with cardLeftAt's wider endX so the smaller card
+    // still ends up ejecting almost to the canvas's right edge instead
+    // of leaving a large gap now that it's narrower.
+    horizontal: { w: 380, h: 300, side: "right",  margin: 76 }
   };
 
   // horizontal (landscape) layout — card ejects sideways from under the
@@ -194,7 +199,12 @@
   // (non-square) horizontal canvas still keeps the camera vertically
   // centered instead of assuming a fixed 1000px-tall canvas.
   function computeHorizontalLayout() {
-    var bodyW = 620, bodyH = 424, bodyR = 36, shoulderH = 94;
+    // shoulderH reduced (94 -> 76) so the ejected polaroid card, which
+    // now starts right below the shoulder plate, has more vertical room
+    // to grow into without needing to overlap the plate itself. Kept
+    // above ~72 so the shutter button (sized off bw, independent of
+    // shoulderH) still has clearance inside the shorter plate.
+    var bodyW = 620, bodyH = 424, bodyR = 36, shoulderH = 76;
     var bodyY = Math.max(24, Math.round((H - bodyH) / 2) - 18);
     return { bodyX: 180, bodyY: bodyY, bodyW: bodyW, bodyH: bodyH, bodyR: bodyR, shoulderH: shoulderH };
   }
@@ -263,11 +273,10 @@
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
-    // Reduced from 60 to 20: at full eject (e=1) the card now sits
-    // further right, showing more of the printed photo out from under
-    // the camera body instead of leaving 60px of it still tucked
-    // underneath. Still keeps a small (20px) overlap so the card visibly
-    // connects to the camera rather than looking fully detached.
+    // At full eject (e=1) the card stays anchored right at the camera
+    // body's edge (small overlap so it visually connects to the camera
+    // rather than floating away from it) — only the card's own size
+    // (CARD_DIMS.horizontal) was reduced, not how far it travels.
     var endX = rightEdge - 20;
     return lerp(startX, endX, e);
   }
@@ -853,17 +862,20 @@ ctx.fill();
       left = (W - dims.w) / 2;
       top = cardTopAt(e, dims.h, L);
     } else {
-      // Anchored from the body's top edge with a small fixed clearance,
-      // instead of vertically centering on cameraCenter() (the lens
-      // area below the shoulder plate). Centering on the lens left ~97px
-      // of unused headroom above the card that overlapped the shoulder
-      // plate but was never used — this reclaims that space so the photo
-      // extends up into the shoulder area, while the fixed clearance
-      // (rather than a center calc) keeps the math simple to reason
-      // about for the bottom-edge safety check below.
-      var topClearance = 16;
+      // Card now starts right at the shoulder plate's bottom edge
+      // (instead of overlapping up into the plate) and its height is
+      // grown dynamically to fill the remaining camera-body height down
+      // to the body's bottom edge, minus a small safety margin that
+      // reserves room for the stacked (2nd/3rd) photo's downward
+      // scatter offset (see stackOffsetFor) and the card's own drop
+      // shadow — so even a stacked card's shadow never pokes out past
+      // L.bodyY + L.bodyH.
+      var STACK_MAX_Y_OFFSET = 24;
+      var SHADOW_MARGIN = 14;
+      var availH = (L.bodyY + L.bodyH) - (L.bodyY + L.shoulderH) - STACK_MAX_Y_OFFSET - SHADOW_MARGIN;
+      dims = Object.assign({}, dims, { h: Math.max(160, availH) });
+      top = L.bodyY + L.shoulderH;
       left = cardLeftAt(e, dims.w, L);
-      top = L.bodyY + topClearance;
     }
     // stacked photos (2nd/3rd) settle slightly offset & rotated from the
     // first, like a scattered pile of instant prints, instead of sitting

@@ -1824,7 +1824,7 @@ var offset =
         if (!manualFrames) {
           stream = off.captureStream(fps);
         }
-        var mimeCandidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+        
         var mimeType = "";
 
 var candidates = [
@@ -1842,31 +1842,6 @@ for (var i = 0; i < candidates.length; i++) {
   }
 }
 
-console.log("Recording with:", mimeType);
-        for (var m = 0; m < mimeCandidates.length; m++) {
-          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeCandidates[m])) {
-            mimeType = mimeCandidates[m];
-            break;
-          }
-        }
-        var mimeType = "";
-
-var candidates = [
-  "video/mp4;codecs=avc1",
-  "video/mp4",
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm"
-];
-
-for (var i = 0; i < candidates.length; i++) {
-  if (MediaRecorder.isTypeSupported(candidates[i])) {
-    mimeType = candidates[i];
-    break;
-  }
-}
-
-console.log("Selected mimeType:", mimeType);
         var recorder = mimeType
           ? new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 })
           : new MediaRecorder(stream);
@@ -1903,7 +1878,12 @@ console.log("Selected mimeType:", mimeType);
 
         var photoCountForHold = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var holdMs = photoCountForHold > 1 ? 1200 : 900;
-        var animMs = state.gifSeconds * 1000;
+        var photoCount =
+    1 +
+    (state.photoImg2 ? 1 : 0) +
+    (state.photoImg3 ? 1 : 0);
+
+var animMs = state.gifSeconds * photoCount * 1000;
 
         // Fixed-timestep frame schedule instead of driving the animation
         // off real rAF wall-clock deltas. The old tick() computed

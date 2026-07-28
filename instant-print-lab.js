@@ -53,7 +53,7 @@
     photoImg2: null,           // 2nd photo — only used for GIF/video (stacks on top of photo 1)
     photoImg3: null,           // 3rd photo — only used for GIF/video (stacks on top of photo 2)
     scale: 6,
-    gifSeconds: 1.4,
+    gifSeconds: 2.4,
     gifLoop: true,
     phase: 1,
     playing: false
@@ -1691,11 +1691,11 @@ var offset =
         // per-segment step count a bit past 1 photo to keep total frame
         // count (and encode time/file size) reasonable
         var photoCount = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
-        var slideSteps = photoCount > 1 ? 10 : 16;
-        var holdSteps = photoCount > 1 ? 3 : 6;
+        var slideSteps = 16;
+        var holdSteps = 6;
         var stepsPerSeg = slideSteps + holdSteps;
         var totalSteps = stepsPerSeg * photoCount;
-        var totalMs = state.gifSeconds * 1000;
+        var totalMs = state.gifSeconds * photoCount * 1000;
         var perFrameMs = totalMs / totalSteps;
         var phases = [];
         for (var s = 0; s <= totalSteps; s++) phases.push(s / totalSteps);

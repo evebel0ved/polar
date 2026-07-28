@@ -1264,9 +1264,125 @@ ctx.fill();
     }, 30);
   });
 
-  // --- byte writer, used to accumulate the encoded PNG/APNG bytes ---------
+  // ---------------------------------------------------------------------
+  // GIF export — median-cut palette + LZW encoder (no external libraries)
+  // ---------------------------------------------------------------------
+  // Pools color samples across every frame (not just the final still frame)
+  // so the single global palette actually represents the whole animation —
+  // this alone removes most of the visible color-shift/banding between
+  // frames that made saved GIFs look broken.
+  function buildPaletteFromFrames(dataArrays, maxColors) {
+    var samples = [];
+    var strideEach = Math.max(4 * 6, Math.floor((4 * 5 * dataArrays.length) / 3));
+    dataArrays.forEach(function (data) {
+      for (var i = 0; i < data.length; i += strideEach) {
+        samples.push([data[i], data[i + 1], data[i + 2]]);
+      }
+    });
+    var boxes = [samples];
+
+    function channelRange(pixels) {
+      var mins = [255, 255, 255], maxs = [0, 0, 0];
+      for (var j = 0; j < pixels.length; j++) {
+        var p = pixels[j];
+        for (var c = 0; c < 3; c++) {
+          if (p[c] < mins[c]) mins[c] = p[c];
+          if (p[c] > maxs[c]) maxs[c] = p[c];
+        }
+      }
+      return { mins: mins, maxs: maxs };
+    }
+
+    while (boxes.length < maxColors) {
+      var bestIdx = -1, bestRange = -1, bestChannel = 0;
+      for (var b = 0; b < boxes.length; b++) {
+        if (boxes[b].length < 2) continue;
+        var rg = channelRange(boxes[b]);
+        var ranges = [rg.maxs[0] - rg.mins[0], rg.maxs[1] - rg.mins[1], rg.maxs[2] - rg.mins[2]];
+        var mx = Math.max(ranges[0], ranges[1], ranges[2]);
+        if (mx > bestRange) { bestRange = mx; bestIdx = b; bestChannel = ranges.indexOf(mx); }
+      }
+      if (bestIdx === -1 || bestRange <= 0) break;
+      var box = boxes[bestIdx];
+      box.sort(function (p, q) { return p[bestChannel] - q[bestChannel]; });
+      var mid = box.length >> 1;
+      boxes.splice(bestIdx, 1, box.slice(0, mid), box.slice(mid));
+    }
+
+    return boxes.map(function (pixels) {
+      var sum = [0, 0, 0];
+      for (var j = 0; j < pixels.length; j++) { sum[0] += pixels[j][0]; sum[1] += pixels[j][1]; sum[2] += pixels[j][2]; }
+      var n = pixels.length || 1;
+      return [Math.round(sum[0] / n), Math.round(sum[1] / n), Math.round(sum[2] / n)];
+    });
+  }
+
+  function makeNearestIndexFn(palette) {
+    var cache = new Map();
+    return function (r, g, b) {
+      var key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+      var hit = cache.get(key);
+      if (hit !== undefined) return hit;
+      var best = 0, bestDist = Infinity;
+      for (var i = 0; i < palette.length; i++) {
+        var p = palette[i];
+        var dr = p[0] - r, dg = p[1] - g, db = p[2] - b;
+        var d = dr * dr + dg * dg + db * db;
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      cache.set(key, best);
+      return best;
+    };
+  }
+
+  // 8x8 Bayer matrix (0..63), used for ordered dithering
+  var BAYER8 = [
+    0, 32, 8, 40, 2, 34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44, 4, 36, 14, 46, 6, 38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+    3, 35, 11, 43, 1, 33, 9, 41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47, 7, 39, 13, 45, 5, 37,
+    63, 31, 55, 23, 61, 29, 53, 21
+  ];
+
+  // Ordered (Bayer) dithering: nudges each pixel by a small, fixed amount
+  // that only depends on its (x, y) position — not on neighboring pixels
+  // or prior frames. That fixed pattern is what makes it work well for
+  // *animated* GIFs: it still breaks up hard 256-color bands on this app's
+  // smooth gradients, but (unlike error-diffusion dithering) the pattern
+  // stays put from frame to frame instead of shifting/shimmering, which is
+  // what made the animation look noisy/broken rather than smoother.
+  function imageDataToIndicesOrderedDither(data, w, h, nearestIndexFn, strength) {
+    strength = strength || 20;
+    var out = new Uint8Array(w * h);
+    for (var y = 0; y < h; y++) {
+      var rowOff = y * w;
+      var by8 = (y & 7) * 8;
+      for (var x = 0; x < w; x++) {
+        var di = (rowOff + x) * 4;
+        var offset = (BAYER8[by8 + (x & 7)] / 63 - 0.5) * strength;
+        var r = clamp(data[di] + offset, 0, 255);
+        var g = clamp(data[di + 1] + offset, 0, 255);
+        var b = clamp(data[di + 2] + offset, 0, 255);
+        out[rowOff + x] = nearestIndexFn(Math.round(r), Math.round(g), Math.round(b));
+      }
+    }
+    return out;
+  }
+
+  function imageDataToIndices(data, w, h, nearestIndexFn) {
+    var out = new Uint8Array(w * h);
+    for (var i = 0, p = 0; i < data.length; i += 4, p++) {
+      out[p] = nearestIndexFn(data[i], data[i + 1], data[i + 2]);
+    }
+    return out;
+  }
+
+  // --- byte writer ---------------------------------------------------------
   // Growable Uint8Array-backed buffer instead of a plain JS array with
-  // .push(). A hand-rolled export of several megapixels × many frames can
+  // .push(). A hand-rolled GIF of several megapixels × many frames can
   // produce tens of millions of bytes; pushing that many numbers onto a
   // plain array is slow and memory-heavy enough to crash the tab (this is
   // the page-error-after-saving bug). Doubling a typed array is both much
@@ -1298,225 +1414,176 @@ ctx.fill();
   };
   ByteWriter.prototype.toUint8Array = function () { return this.buf.subarray(0, this.len); };
 
-  // ---------------------------------------------------------------------
-  // APNG export — true 24-bit color per frame, no fixed palette (no
-  // external libraries). Replaces the old GIF path: GIF is capped at 256
-  // colors per frame by the format itself, so however good the palette/
-  // dithering gets, photos and gradients still show visible color
-  // separation/banding. PNG (and therefore APNG) has no such limit —
-  // each frame is full RGB — so that banding goes away entirely. The
-  // tradeoff is a larger file (full-color frames compress less than a
-  // paletted GIF frame) and slightly narrower support in some chat apps
-  // that treat APNG as a static image, which is called out in the
-  // in-app status message after saving.
-  // ---------------------------------------------------------------------
+  // --- LZW encoder (standard GIF LZW/variable-width code algorithm) ------
+  var EOF = -1, BITS = 12, HSIZE = 5003;
+  var MASKS = [0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F,
+    0x00FF, 0x01FF, 0x03FF, 0x07FF, 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF];
 
-  // --- CRC32 (required to close every PNG chunk) --------------------------
-  var _crcTable = null;
-  function crc32(bytes, start, length) {
-    if (!_crcTable) {
-      _crcTable = new Uint32Array(256);
-      for (var n = 0; n < 256; n++) {
-        var c = n;
-        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-        _crcTable[n] = c >>> 0;
+  function LZWEncoder(width, height, pixels, colorDepth) {
+    var initCodeSize = Math.max(2, colorDepth);
+    var accum = new Uint8Array(256);
+    var htab = new Int32Array(HSIZE);
+    var codetab = new Int32Array(HSIZE);
+    var curAccum = 0, curBits = 0;
+    var aCount = 0;
+    var freeEnt = 0;
+    var maxcode = 0;
+    var clearFlg = false;
+    var gInitBits = 0, clearCode = 0, eofCode = 0;
+    var remaining = 0, curPixel = 0;
+    var nBits = 0;
+
+    function maxcodeFor(n) { return (1 << n) - 1; }
+
+    function charOut(c, outs) {
+      accum[aCount++] = c;
+      if (aCount >= 254) flushChar(outs);
+    }
+    function flushChar(outs) {
+      if (aCount > 0) {
+        outs.writeByte(aCount);
+        outs.writeBytes(accum, 0, aCount);
+        aCount = 0;
       }
     }
-    start = start || 0;
-    length = length === undefined ? bytes.length - start : length;
-    var crc = 0xffffffff;
-    for (var i = 0; i < length; i++) {
-      crc = _crcTable[(crc ^ bytes[start + i]) & 0xff] ^ (crc >>> 8);
+    function clHash(hsize) { for (var i = 0; i < hsize; i++) htab[i] = -1; }
+    function clBlock(outs) {
+      clHash(HSIZE);
+      freeEnt = clearCode + 2;
+      clearFlg = true;
+      output(clearCode, outs);
     }
-    return (crc ^ 0xffffffff) >>> 0;
+    function nextPixel() {
+      if (remaining === 0) return EOF;
+      remaining--;
+      var px = pixels[curPixel++];
+      return px & 0xff;
+    }
+    function output(code, outs) {
+      curAccum &= MASKS[curBits];
+      if (curBits > 0) curAccum |= (code << curBits);
+      else curAccum = code;
+      curBits += nBits;
+      while (curBits >= 8) {
+        charOut(curAccum & 0xff, outs);
+        curAccum >>= 8;
+        curBits -= 8;
+      }
+      if (freeEnt > maxcode || clearFlg) {
+        if (clearFlg) {
+          nBits = gInitBits;
+          maxcode = maxcodeFor(nBits);
+          clearFlg = false;
+        } else {
+          nBits++;
+          maxcode = nBits === BITS ? (1 << BITS) : maxcodeFor(nBits);
+        }
+      }
+      if (code === eofCode) {
+        while (curBits > 0) {
+          charOut(curAccum & 0xff, outs);
+          curAccum >>= 8;
+          curBits -= 8;
+        }
+        flushChar(outs);
+      }
+    }
+    function compress(initBits, outs) {
+      var fcode, c, i, ent, disp, hshift;
+      gInitBits = initBits;
+      clearFlg = false;
+      nBits = gInitBits;
+      maxcode = maxcodeFor(nBits);
+      clearCode = 1 << (initBits - 1);
+      eofCode = clearCode + 1;
+      freeEnt = clearCode + 2;
+      aCount = 0;
+      ent = nextPixel();
+      hshift = 0;
+      for (fcode = HSIZE; fcode < 65536; fcode *= 2) hshift++;
+      hshift = 8 - hshift;
+      clHash(HSIZE);
+      output(clearCode, outs);
+
+      outerLoop:
+      while ((c = nextPixel()) !== EOF) {
+        fcode = (c << BITS) + ent;
+        i = (c << hshift) ^ ent;
+        if (htab[i] === fcode) { ent = codetab[i]; continue; }
+        else if (htab[i] >= 0) {
+          disp = HSIZE - i;
+          if (i === 0) disp = 1;
+          do {
+            i -= disp;
+            if (i < 0) i += HSIZE;
+            if (htab[i] === fcode) { ent = codetab[i]; continue outerLoop; }
+          } while (htab[i] >= 0);
+        }
+        output(ent, outs);
+        ent = c;
+        if (freeEnt < (1 << BITS)) {
+          codetab[i] = freeEnt++;
+          htab[i] = fcode;
+        } else {
+          clBlock(outs);
+        }
+      }
+      output(ent, outs);
+      output(eofCode, outs);
+    }
+
+    this.encode = function (outs) {
+      outs.writeByte(initCodeSize);
+      remaining = width * height;
+      curPixel = 0;
+      compress(initCodeSize + 1, outs);
+      outs.writeByte(0);
+    };
   }
 
-  // --- deflate via the browser's own Compression Streams API -------------
-  // Avoids shipping/hand-rolling a zlib implementation just for this.
-  // Support: Chrome/Edge 80+, Safari 16.4+, Firefox 113+ — effectively
-  // every browser this app already targets for canvas/MediaRecorder.
-  //
-  // The PNG spec requires IDAT/fdAT payloads to be a full zlib datastream
-  // (RFC 1950): a 2-byte zlib header, the raw DEFLATE-compressed data,
-  // and a 4-byte big-endian Adler-32 checksum of the *uncompressed* data
-  // — not bare DEFLATE on its own. The only deflate mode the
-  // Compression Streams API exposes that maps onto standard, cross-tool
-  // DEFLATE bytes is "deflate-raw" (plain "deflate" adds its own framing
-  // that isn't zlib's either), so this wraps that raw output with the
-  // zlib header/trailer by hand. Skipping this and using deflate-raw
-  // output directly is what produced files that browsers/OS photo apps
-  // correctly identified as animated PNGs (right dimensions, right frame
-  // count) but then failed to decode the actual pixel data from —
-  // exactly the "broken data stream" failure mode this fixes.
-  function adler32(bytes) {
-    var a = 1, b = 0, MOD = 65521;
-    for (var i = 0; i < bytes.length; i++) {
-      a = (a + bytes[i]) % MOD;
-      b = (b + a) % MOD;
-    }
-    return ((b << 16) | a) >>> 0;
-  }
+  function encodeGIF(opts) {
+    var width = opts.width, height = opts.height, palette = opts.palette, frames = opts.frames, loop = opts.loop;
+    var bits = Math.max(1, Math.ceil(Math.log2(palette.length)));
+    var tableSize = 1 << bits;
+    var paddedPalette = palette.slice();
+    while (paddedPalette.length < tableSize) paddedPalette.push([0, 0, 0]);
 
-  function deflateZlib(bytes) {
-    if (typeof CompressionStream === "undefined") {
-      return Promise.reject(new Error("CompressionStream unsupported"));
+    var out = new ByteWriter();
+    out.writeString("GIF89a");
+    out.writeByte(width & 0xff); out.writeByte((width >> 8) & 0xff);
+    out.writeByte(height & 0xff); out.writeByte((height >> 8) & 0xff);
+    out.writeByte(0x80 | (7 << 4) | (bits - 1));
+    out.writeByte(0);
+    out.writeByte(0);
+    for (var i = 0; i < tableSize; i++) {
+      var c = paddedPalette[i];
+      out.writeByte(c[0]); out.writeByte(c[1]); out.writeByte(c[2]);
     }
-    var cs = new CompressionStream("deflate-raw");
-    var writer = cs.writable.getWriter();
-    writer.write(bytes);
-    writer.close();
-    return new Response(cs.readable).arrayBuffer().then(function (buf) {
-      var raw = new Uint8Array(buf);
-      var checksum = adler32(bytes);
-      var out = new Uint8Array(2 + raw.length + 4);
-      out[0] = 0x78; out[1] = 0x9c; // zlib header: deflate, 32K window, default compression
-      out.set(raw, 2);
-      var off = 2 + raw.length;
-      out[off] = (checksum >>> 24) & 0xff;
-      out[off + 1] = (checksum >>> 16) & 0xff;
-      out[off + 2] = (checksum >>> 8) & 0xff;
-      out[off + 3] = checksum & 0xff;
-      return out;
+    if (loop) {
+      out.writeByte(0x21); out.writeByte(0xff); out.writeByte(11);
+      out.writeString("NETSCAPE2.0");
+      out.writeByte(3); out.writeByte(1);
+      out.writeByte(0); out.writeByte(0);
+      out.writeByte(0);
+    }
+    frames.forEach(function (frame) {
+      out.writeByte(0x21); out.writeByte(0xf9); out.writeByte(4);
+      out.writeByte(0x08); // disposal: restore to background
+      var delayCs = Math.max(2, Math.round(frame.delay / 10));
+      out.writeByte(delayCs & 0xff); out.writeByte((delayCs >> 8) & 0xff);
+      out.writeByte(0);
+      out.writeByte(0);
+      out.writeByte(0x2c);
+      out.writeByte(0); out.writeByte(0);
+      out.writeByte(0); out.writeByte(0);
+      out.writeByte(width & 0xff); out.writeByte((width >> 8) & 0xff);
+      out.writeByte(height & 0xff); out.writeByte((height >> 8) & 0xff);
+      out.writeByte(0);
+      var lzw = new LZWEncoder(width, height, frame.indices, bits);
+      lzw.encode(out);
     });
-  }
-
-  // --- PNG chunk writer ----------------------------------------------------
-  function writeChunk(out, type, data) {
-    var len = data ? data.length : 0;
-    out.writeByte((len >>> 24) & 0xff); out.writeByte((len >>> 16) & 0xff);
-    out.writeByte((len >>> 8) & 0xff); out.writeByte(len & 0xff);
-    var crcStart = out.len;
-    out.writeString(type);
-    if (data) out.writeBytes(data);
-    var crc = crc32(out.buf, crcStart, out.len - crcStart);
-    out.writeByte((crc >>> 24) & 0xff); out.writeByte((crc >>> 16) & 0xff);
-    out.writeByte((crc >>> 8) & 0xff); out.writeByte(crc & 0xff);
-  }
-
-  function u32Bytes(v) {
-    return [(v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff];
-  }
-
-  // Applies the PNG "Up" filter (each byte stored as the difference from
-  // the same byte in the previous row) to every scanline. Chosen over
-  // "None" because it consistently shrinks this app's frames (flat color
-  // fields + smooth gradients + repeated frame-to-frame background) far
-  // better than storing raw bytes, for a fraction of the CPU cost of
-  // trying all five PNG filter types per line and picking the best.
-  function filterUp(rgba, w, h) {
-    var stride = w * 4;
-    var out = new Uint8Array((stride + 1) * h);
-    var prevRow = null;
-    for (var y = 0; y < h; y++) {
-      var rowStart = y * stride;
-      var outStart = y * (stride + 1);
-      out[outStart] = 2; // filter type 2 = Up
-      for (var x = 0; x < stride; x++) {
-        var v = rgba[rowStart + x];
-        var up = prevRow ? prevRow[x] : 0;
-        out[outStart + 1 + x] = (v - up) & 0xff;
-      }
-      prevRow = rgba.subarray(rowStart, rowStart + stride);
-    }
-    return out;
-  }
-
-  // RGBA Uint8ClampedArray -> zlib-compressed, filtered scanline data
-  // ready to split across IDAT/fdAT chunks.
-  function encodeFrameData(imgData, w, h) {
-    var filtered = filterUp(imgData, w, h);
-    return deflateZlib(filtered);
-  }
-
-  // Splits compressed bytes into <=maxLen chunks (PNG chunk length field
-  // is 4 bytes but keeping individual chunks modest avoids ever pushing
-  // a single chunk near the practical decoder-friendly size).
-  function splitBytes(bytes, maxLen) {
-    var parts = [];
-    for (var i = 0; i < bytes.length; i += maxLen) {
-      parts.push(bytes.subarray(i, Math.min(i + maxLen, bytes.length)));
-    }
-    return parts.length ? parts : [new Uint8Array(0)];
-  }
-
-  // opts: { width, height, frames: [{ data: Uint8ClampedArray RGBA, delayMs }], loop }
-  // Returns a Promise<Uint8Array> of the full APNG file.
-  function encodeAPNG(opts) {
-    var width = opts.width, height = opts.height, frames = opts.frames, loop = opts.loop;
-    var CHUNK_MAX = 1 << 16;
-
-    return Promise.all(frames.map(function (f) {
-      return encodeFrameData(f.data, width, height);
-    })).then(function (compressedFrames) {
-      var out = new ByteWriter();
-      // PNG signature
-      out.writeBytes(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-
-      // IHDR
-      var ihdr = new Uint8Array(13);
-      ihdr.set(u32Bytes(width), 0);
-      ihdr.set(u32Bytes(height), 4);
-      ihdr[8] = 8;  // bit depth
-      ihdr[9] = 6;  // color type: truecolor + alpha
-      ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
-      writeChunk(out, "IHDR", ihdr);
-
-      // acTL — animation control (must precede IDAT)
-      var acTL = new Uint8Array(8);
-      acTL.set(u32Bytes(frames.length), 0);
-      acTL.set(u32Bytes(loop ? 0 : 1), 4); // 0 = loop forever
-      writeChunk(out, "acTL", acTL);
-
-      var seq = 0;
-
-      // First frame is written as the standard IDAT stream (also the
-      // fallback image non-APNG-aware viewers/decoders show), preceded
-      // by its own fcTL per the APNG spec.
-      var fcTL0 = new Uint8Array(26);
-      fcTL0.set(u32Bytes(seq++), 0);
-      fcTL0.set(u32Bytes(width), 4);
-      fcTL0.set(u32Bytes(height), 8);
-      fcTL0.set(u32Bytes(0), 12); // x_offset
-      fcTL0.set(u32Bytes(0), 16); // y_offset
-      var delay0 = Math.max(2, Math.round(frames[0].delayMs));
-      // delay as fraction delay_num/delay_den; using milliseconds/1000 den
-      // keeps this exact without needing a gcd reduction step.
-      fcTL0[20] = (delay0 >> 8) & 0xff; fcTL0[21] = delay0 & 0xff;
-      fcTL0[22] = (1000 >> 8) & 0xff; fcTL0[23] = 1000 & 0xff;
-      fcTL0[24] = 1; // dispose_op: background (matches old GIF's disposal=restore-to-background)
-      fcTL0[25] = 0; // blend_op: source
-      writeChunk(out, "fcTL", fcTL0);
-
-      splitBytes(compressedFrames[0], CHUNK_MAX).forEach(function (part) {
-        writeChunk(out, "IDAT", part);
-      });
-
-      // Remaining frames as fcTL + fdAT pairs
-      for (var i = 1; i < frames.length; i++) {
-        var fcTL = new Uint8Array(26);
-        fcTL.set(u32Bytes(seq++), 0);
-        fcTL.set(u32Bytes(width), 4);
-        fcTL.set(u32Bytes(height), 8);
-        fcTL.set(u32Bytes(0), 12);
-        fcTL.set(u32Bytes(0), 16);
-        var delay = Math.max(2, Math.round(frames[i].delayMs));
-        fcTL[20] = (delay >> 8) & 0xff; fcTL[21] = delay & 0xff;
-        fcTL[22] = (1000 >> 8) & 0xff; fcTL[23] = 1000 & 0xff;
-        fcTL[24] = 1;
-        fcTL[25] = 0;
-        writeChunk(out, "fcTL", fcTL);
-
-        splitBytes(compressedFrames[i], CHUNK_MAX).forEach(function (part) {
-          var withSeq = new Uint8Array(4 + part.length);
-          withSeq.set(u32Bytes(seq++), 0);
-          withSeq.set(part, 4);
-          writeChunk(out, "fdAT", withSeq);
-        });
-      }
-
-      writeChunk(out, "IEND", null);
-      return out.toUint8Array();
-    });
+    out.writeByte(0x3b);
+    return out.toUint8Array();
   }
 
   function resetGifButtons() {
@@ -1581,29 +1648,24 @@ ctx.fill();
     downloadPngBtn.disabled = true;
     playPreviewBtn.disabled = true;
     if (typeof downloadVideoBtn !== "undefined" && downloadVideoBtn) downloadVideoBtn.disabled = true;
-
-    if (typeof CompressionStream === "undefined") {
-      statusText.textContent = "이 브라우저에서는 애니메이션 PNG 저장을 지원하지 않아요. 동영상 저장을 이용해 주세요.";
-      resetGifButtons();
-      return;
-    }
-
-    statusText.textContent = "이미지 프레임 렌더링 중…";
+    statusText.textContent = "GIF 프레임 렌더링 중…";
 
     setTimeout(function () {
       try {
-        // APNG carries full 24-bit color (no 256-color palette limit like
-        // GIF), so export resolution no longer needs to be inflated just
-        // to keep a fixed dither pattern below the eye's resolving power
-        // — 1.8x is plenty crisp on high-density phone screens while
-        // keeping frame count x resolution (and therefore file size and
-        // encode time) reasonable.
-        var apngScale = 1.8;
-        var gw = Math.round(W * apngScale), gh = Math.round(H * apngScale);
+        // Raised from 1.6 to 2.2: on high-density phone screens (2x-3x
+        // device pixel ratio) a 1.6x export (2240x1280) still gets
+        // upscaled by the OS/gallery viewer when opened at normal size,
+        // which blows the fixed 8x8 Bayer dither pattern up into visible
+        // "grain" without the user needing to pinch-zoom. At 2.2x
+        // (3080x1760) each dither cell maps to a smaller fraction of the
+        // screen, so the pattern stays below the eye's resolving power at
+        // normal viewing sizes.
+        var gifScale = 2.2;
+        var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
         var off = document.createElement("canvas");
         off.width = gw; off.height = gh;
         var octx = off.getContext("2d");
-        octx.scale(apngScale, apngScale);
+        octx.scale(gifScale, gifScale);
 
         // Pre-downscale source photos once (capped a bit above the export
         // canvas's own resolution) instead of letting every animation
@@ -1626,27 +1688,56 @@ ctx.fill();
         // brief extra hold on the final resting shot
         for (var h = 0; h < (photoCount > 1 ? 8 : 6); h++) phases.push(1);
 
-        var rawFrames = phases.map(function (ph) {
+        var rawFrames = [];
+        phases.forEach(function (ph) {
           renderScene(octx, ph, exportState);
-          return { data: octx.getImageData(0, 0, gw, gh).data, delayMs: perFrameMs };
+          rawFrames.push(octx.getImageData(0, 0, gw, gh));
         });
 
-        statusText.textContent = "이미지 인코딩 중… (" + rawFrames.length + "프레임)";
+        statusText.textContent = "GIF 색상 팔레트 계산 중…";
         setTimeout(function () {
-          encodeAPNG({ width: gw, height: gh, frames: rawFrames, loop: state.gifLoop })
-            .then(function (bytes) {
-              var blob = new Blob([bytes], { type: "image/png" });
-              downloadBlob(blob, "instant-print-card.apng.png");
-              statusText.textContent = "움직이는 PNG 저장 완료 (" + gw + "×" + gh + ", " + rawFrames.length + "프레임) — 색상 제한 없는 고화질 포맷이에요. 일부 앱에서는 정지 이미지로만 보일 수 있어요.";
+          try {
+            // palette pooled across every frame — not just the last still
+            // frame — so colors stay consistent through the whole animation
+            var palette = buildPaletteFromFrames(rawFrames.map(function (f) { return f.data; }), 256);
+            var nearest = makeNearestIndexFn(palette);
+
+            statusText.textContent = "GIF 인코딩 중… (" + rawFrames.length + "프레임)";
+            setTimeout(function () {
+              try {
+                var frames = rawFrames.map(function (imgData) {
+                  // ordered (Bayer) dithering: smooths gradient banding
+                  // without the frame-to-frame shimmer error-diffusion
+                  // dithering caused on this animation
+                  return {
+                    // strength lowered again, 9 -> 5, alongside the export
+                    // resolution bump above. 9 still produced a visible
+                    // dot grid on high-density mobile screens at normal
+                    // (non-zoomed) viewing size. 5 is the smallest nudge
+                    // that still meaningfully breaks flat-color/gradient
+                    // banding into the 256-color palette, while staying
+                    // under the threshold of what's visible without
+                    // zooming in.
+                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 5),
+                    delay: perFrameMs
+                  };
+                });
+                var bytes = encodeGIF({ width: gw, height: gh, palette: palette, frames: frames, loop: state.gifLoop });
+                var blob = new Blob([bytes], { type: "image/gif" });
+                downloadBlob(blob, "instant-print-card.gif");
+                statusText.textContent = "GIF 저장 완료 (" + gw + "×" + gh + ", " + frames.length + "프레임)";
+              } catch (err3) {
+                statusText.textContent = "GIF 인코딩 중 오류가 발생했어요. 다시 시도해 주세요.";
+              }
               resetGifButtons();
-            })
-            .catch(function () {
-              statusText.textContent = "이미지 인코딩 중 오류가 발생했어요. 다시 시도해 주세요.";
-              resetGifButtons();
-            });
+            }, 20);
+          } catch (err2) {
+            statusText.textContent = "GIF 색상 계산 중 오류가 발생했어요. 다시 시도해 주세요.";
+            resetGifButtons();
+          }
         }, 20);
       } catch (err1) {
-        statusText.textContent = "이미지 렌더링 중 오류가 발생했어요. 다시 시도해 주세요.";
+        statusText.textContent = "GIF 렌더링 중 오류가 발생했어요. 다시 시도해 주세요.";
         resetGifButtons();
       }
     }, 30);
@@ -1654,12 +1745,10 @@ ctx.fill();
 
   // ---------------------------------------------------------------------
   // Video (WebM) export — uses the browser's own encoder via
-  // canvas.captureStream() + MediaRecorder, so encoding is far faster/
-  // lighter than the hand-rolled APNG path above, and file size stays
-  // much smaller for the same visual quality (real video compression vs.
-  // a sequence of independently-compressed full-color PNG frames).
+  // canvas.captureStream() + MediaRecorder, so quality is far higher (and
+  // encoding far faster/lighter) than the hand-rolled GIF path above.
   // Added as a companion "동영상으로 저장" button placed right after the
-  // animated-PNG button.
+  // GIF button, since no video export existed before.
   // ---------------------------------------------------------------------
   function createVideoButton() {
     if (!downloadGifBtn || !downloadGifBtn.parentNode) return null;
@@ -1762,7 +1851,7 @@ ctx.fill();
         // video even though the on-screen *preview* (which isn't going
         // through an encoder) never showed one. Precomputing an evenly
         // spaced phase list up front — same approach already used for
-        // the animated-PNG export above — and pacing delivery with setTimeout at
+        // the GIF export above — and pacing delivery with setTimeout at
         // a fixed target interval makes every frame land at an exact,
         // predictable spot regardless of how bursty rendering actually
         // is on the device.
@@ -1800,7 +1889,7 @@ ctx.fill();
         }
         requestAnimationFrame(tick);
       } catch (errStart) {
-        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. 움직이는 PNG 저장을 이용해 주세요.";
+        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. GIF 저장을 이용해 주세요.";
         resetVideoButtons();
       }
     });

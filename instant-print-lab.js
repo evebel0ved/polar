@@ -1146,44 +1146,57 @@ var duration = state.gifSeconds * photoCount * 1000;
     return /Android/.test(navigator.userAgent);
   }
 
-  // Mobile browsers (iOS Safari/Chrome, many Android in-app/webview
-  // browsers) don't reliably honor `<a download>` on blob: URLs — instead
-  // of saving the file they just navigate to/preview the blob, so nothing
-  // ever reaches Photos/Downloads.
-  //
-  // We always pre-open a blank tab synchronously inside the click handler
-  // (see downloadPngBtn below) and just navigate it here once the blob is
-  // ready. That tab is the reliable fallback on both iOS and Android. If
-  // Web Share (with files) is available we try that FIRST since it opens
-  // the native "Save Image" sheet directly — but critically we still keep
-  // the pre-opened tab as the fallback destination if sharing fails,
-  // rather than trying to open a *new* window from inside the async
-  // share-rejection handler (that second window.open() call happens
-  // outside the original click gesture and gets silently blocked on iOS,
-  // which is what was showing up as a save error).
+  // iOS Safari/Chrome never honor `<a download>` on blob: URLs — clicking
+  // just opens/previews the image instead of saving it. The only way to
+  // get a real "Save Image" prompt without leaving the page is the Web
+  // Share API with a File — it opens the native share sheet, which has a
+  // "Save Image" action. No new tab is opened for iOS at all.
+  // Android in-app browsers (KakaoTalk etc.) often lack navigator.share
+  // with file support, so they keep the new-tab long-press fallback.
   function downloadBlob(blob, filename, existingWin) {
-    var mobile = isIOS() || isAndroid();
+    var ios = isIOS();
+    var android = isAndroid();
 
-    if (mobile && navigator.canShare && window.File) {
-      try {
-        var file = new File([blob], filename, { type: blob.type || "image/png" });
-        if (navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file] }).then(function () {
-            if (existingWin) { try { existingWin.close(); } catch (e) {} }
-          }).catch(function () {
-            // share sheet cancelled/failed — fall back to the tab we
-            // already opened synchronously during the click, never open
-            // a fresh window here (would be blocked on iOS)
-            openBlobInNewTab(blob, existingWin);
-          });
-          return;
+    if (ios) {
+      if (navigator.canShare && window.File) {
+        try {
+          var iosFile = new File([blob], filename, { type: blob.type || "image/png" });
+          if (navigator.canShare({ files: [iosFile] })) {
+            navigator.share({ files: [iosFile] }).catch(function () {
+              // user cancelled the share sheet — nothing else to do,
+              // no new tab is opened on iOS per user preference
+            });
+            return;
+          }
+        } catch (shareErr) {
+          // fall through — no share support, nothing else we can do
+          // without opening a tab, which we're avoiding on iOS
         }
-      } catch (shareErr) {
-        // fall through to the tab fallback below
       }
+      // Share API unavailable: last resort is direct navigation in the
+      // current tab (user can long-press the resulting image to save it).
+      var iosUrl = URL.createObjectURL(blob);
+      window.location.href = iosUrl;
+      setTimeout(function () { URL.revokeObjectURL(iosUrl); }, 60000);
+      return;
     }
 
-    if (mobile) {
+    if (android) {
+      if (navigator.canShare && window.File) {
+        try {
+          var file = new File([blob], filename, { type: blob.type || "image/png" });
+          if (navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file] }).then(function () {
+              if (existingWin) { try { existingWin.close(); } catch (e) {} }
+            }).catch(function () {
+              openBlobInNewTab(blob, existingWin);
+            });
+            return;
+          }
+        } catch (shareErr) {
+          // fall through to the tab fallback below
+        }
+      }
       openBlobInNewTab(blob, existingWin);
       return;
     }
@@ -1231,15 +1244,15 @@ var duration = state.gifSeconds * photoCount * 1000;
     downloadPngBtn.disabled = true;
     statusText.textContent = "PNG 렌더링 중… (×" + state.scale + ")";
 
-    // On iOS Safari, window.open() only succeeds when called synchronously
-    // inside the click handler — any later call (e.g. after the render's
-    // setTimeout/toBlob, or from inside a Promise rejection handler) is
-    // treated as a popup and silently blocked. So on mobile we always open
-    // a blank tab right now (even if we intend to try Web Share first),
-    // and just navigate it if sharing isn't available or fails.
+    // On Android, a blank tab is pre-opened synchronously here (before the
+    // async render/toBlob), since some in-app browsers there lack file
+    // sharing and need the new-tab long-press fallback — and window.open()
+    // must happen inside the original click gesture or it gets blocked.
+    // iOS relies solely on the Web Share API (see downloadBlob), so no tab
+    // is opened for it at all.
     var mobile = isIOS() || isAndroid();
     var preOpenedWin = null;
-    if (mobile) {
+    if (isAndroid()) {
       preOpenedWin = window.open("", "_blank");
     }
 
@@ -1287,9 +1300,11 @@ var duration = state.gifSeconds * photoCount * 1000;
           return;
         }
         downloadBlob(blob, "instant-print-card.png", preOpenedWin);
-        statusText.textContent = mobile
-          ? "PNG 준비 완료 — 새 탭/공유창에서 이미지를 저장하세요."
-          : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
+        statusText.textContent = isIOS()
+          ? "PNG 준비 완료 — 공유창에서 '이미지 저장'을 눌러주세요."
+          : mobile
+            ? "PNG 준비 완료 — 새 탭/공유창에서 이미지를 저장하세요."
+            : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
         downloadPngBtn.disabled = false;
       }, "image/png");
     }, 30);

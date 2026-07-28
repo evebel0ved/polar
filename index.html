@@ -384,7 +384,7 @@ label.check input{accent-color:var(--accent);}
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">02 · 추가 사진 (동영상 전용)</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">02 · 추가 사진 (동영상 전용)</span></summary>
       <div class="group-body">
       <div class="upload-row">
         <input id="photoInput2" type="file" accept="image/*">
@@ -401,21 +401,21 @@ label.check input{accent-color:var(--accent);}
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">03 · 카메라 컬러</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">03 · 카메라 컬러</span></summary>
       <div class="group-body">
       <div class="swatch-grid" id="cameraSwatchGrid"></div>
       </div>
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">04 · 배경</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">04 · 배경</span></summary>
       <div class="group-body">
       <div class="swatch-grid" id="bgSwatchGrid"></div>
       </div>
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">05 · 출력 방향</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">05 · 출력 방향</span></summary>
       <div class="group-body">
       <div class="toggle-row">
         <button type="button" class="toggle-btn is-active" id="orientVertical">세로</button>
@@ -425,7 +425,7 @@ label.check input{accent-color:var(--accent);}
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">06 · 출력 문구</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">06 · 출력 문구</span></summary>
       <div class="group-body">
       <input type="text" class="text-input" id="captionInput" maxlength="40" value="INSTANT" placeholder="예: INSTANT (비워두면 공백으로 출력)">
       <p class="upload-note">폴라로이드 흰 여백에 들어가는 문구를 자유롭게 바꿀 수 있어요.</p>
@@ -433,7 +433,7 @@ label.check input{accent-color:var(--accent);}
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">07 · 시리얼 넘버</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">07 · 시리얼 넘버</span></summary>
       <div class="group-body">
       <input type="text" class="text-input" id="serialInput" maxlength="14" value="N° 01" placeholder="예: N° 01 (비워두면 공백으로 출력)">
       <p class="upload-note">여백에 작게 들어가는 "N° 01" 문구를 자유롭게 바꿀 수 있어요. 숫자로 끝나면 추가 사진마다 번호가 자동으로 하나씩 올라가요.</p>
@@ -441,7 +441,7 @@ label.check input{accent-color:var(--accent);}
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">08 · 출력 해상도 배율</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">08 · 출력 해상도 배율</span></summary>
       <div class="group-body">
       <div class="range-row">
         <input id="scaleRange" type="range" min="2" max="8" step="1" value="6">
@@ -452,7 +452,7 @@ label.check input{accent-color:var(--accent);}
     </details>
 
     <details class="field-group" open>
-      <summary><span class="eyebrow">09 · 동영상 애니메이션</span><span class="chevron">▾</span></summary>
+      <summary><span class="eyebrow">09 · 동영상 애니메이션</span></summary>
       <div class="group-body">
       <div class="range-row">
         <input id="gifRange" type="range" min="0.8" max="7" step="0.1" value="3.0">
@@ -477,18 +477,7 @@ label.check input{accent-color:var(--accent);}
   @beI0ved_
 </div>
   
-<script>
-// summary(헤더) 전체가 아니라 화살표(.chevron)를 눌렀을 때만 접고 펼치도록 함.
-// <summary> 클릭의 기본 토글 동작을 막고, 화살표 클릭 시에만 details.open을 반전시킴.
-document.querySelectorAll('.field-group > summary').forEach(function (summary) {
-  summary.addEventListener('click', function (e) {
-    e.preventDefault();
-    if (e.target.closest('.chevron')) {
-      summary.parentElement.open = !summary.parentElement.open;
-    }
-  });
-});
-</script>
+
 <script src="instant-print-lab.js"></script>
 </body>
 </html>

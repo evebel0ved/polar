@@ -1575,68 +1575,18 @@ var offset =
         renderScene(octx, 0, videoExportState);
 
         var fps = 30;
-        var stream, track = null, manualFrames = false;
-        try {
-          stream = off.captureStream(0);
-          track = stream.getVideoTracks && stream.getVideoTracks()[0];
-          manualFrames = !!(track && typeof track.requestFrame === "function");
-        } catch (probeErr) {
-          manualFrames = false;
-        }
-        if (!manualFrames) {
-          stream = off.captureStream(fps);
-        }
-        
-        var mimeType = "";
-
-var candidates = [
-  "video/mp4;codecs=avc1",
-  "video/mp4",
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm"
-];
-
-for (var i = 0; i < candidates.length; i++) {
-  if (MediaRecorder.isTypeSupported(candidates[i])) {
-    mimeType = candidates[i];
-    break;
-  }
-}
-
-        var recorder = mimeType
-          ? new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 })
-          : new MediaRecorder(stream);
-        var chunks = [];
-        recorder.ondataavailable = function (e) {
-          if (e.data && e.data.size > 0) chunks.push(e.data);
-        };
-        recorder.onerror = function () {
-          statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
-          resetVideoButtons();
-        };
-        recorder.onstop = function () {
-  try {
-
-    var actualType = recorder.mimeType || mimeType || "video/webm";
-    var ext = actualType.indexOf("mp4") !== -1 ? "mp4" : "webm";
-
-    var blob = new Blob(chunks, {
-      type: actualType
-    });
-
-    downloadBlob(blob, "polaroid." + ext);
-
-    statusText.textContent =
-      "동영상 저장 완료 (" + vw + "×" + vh + ")";
-
-  } catch (errStop) {
-    console.error(errStop);
-    statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
-  }
-
-  resetVideoButtons();
-};
+        // NOTE: previously this tried captureStream(0) + track.requestFrame()
+        // ("manual" frame pumping) whenever the browser exposed
+        // requestFrame(). On some Android Chrome builds that combination
+        // is unreliable — rAF gets throttled or requestFrame() silently
+        // no-ops — so the MediaRecorder only ever receives a couple of
+        // frames and the saved clip ends up 0–3s long regardless of the
+        // intended duration. Forcing the *automatic* captureStream(fps)
+        // mode makes the browser itself responsible for pulling frames
+        // off the canvas at a steady rate, which is far more consistent
+        // across devices. We still redraw the canvas manually in tick()
+        // so the automatic sampler always has fresh content to grab.
+        var stream = off.captureStream(fps);
 
         var photoCountForHold = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var holdMs = photoCountForHold > 1 ? 1200 : 900;
@@ -1645,7 +1595,8 @@ for (var i = 0; i < candidates.length; i++) {
     (state.photoImg2 ? 1 : 0) +
     (state.photoImg3 ? 1 : 0);
 
-var animMs = state.gifSeconds * photoCount * 1000;
+        var animMs = state.gifSeconds * photoCount * 1000;
+        var expectedSeconds = (animMs + holdMs) / 1000;
 
         var recordFps = 30;
         var frameIntervalMs = 1000 / recordFps;
@@ -1655,34 +1606,164 @@ var animMs = state.gifSeconds * photoCount * 1000;
         for (var vf = 0; vf <= animFrameCount; vf++) frameTs.push(vf / animFrameCount);
         for (var vh2 = 0; vh2 < holdFrameCount; vh2++) frameTs.push(1);
 
-       // 1. recorder.start() -> recorder.start(100) 으로 변경
-        recorder.start(100); 
+        // mp4 is required for upload targets that reject webm, so it's
+        // always tried first. But some Android hardware H.264 encoders
+        // drop frames after the first keyframe even though
+        // isTypeSupported() reports true, which produces the same
+        // "clip is way too short" symptom from the encoder side instead
+        // of the frame-supply side. recordOnce() below is reused so we
+        // can transparently retry with webm if the mp4 output comes back
+        // implausibly short, without duplicating the whole recording
+        // pipeline.
+        var mp4Candidates = ["video/mp4;codecs=avc1", "video/mp4"];
+        var webmCandidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+
+        function pickSupported(list) {
+          for (var i = 0; i < list.length; i++) {
+            if (MediaRecorder.isTypeSupported(list[i])) return list[i];
+          }
+          return "";
+        }
+
+        function getBlobDurationSeconds(blob) {
+          return new Promise(function (resolve) {
+            try {
+              var v = document.createElement("video");
+              v.preload = "metadata";
+              v.muted = true;
+              var url = URL.createObjectURL(blob);
+              var settled = false;
+              function finish(val) {
+                if (settled) return;
+                settled = true;
+                URL.revokeObjectURL(url);
+                resolve(val);
+              }
+              v.onloadedmetadata = function () {
+                // Some browsers report Infinity/NaN for duration on
+                // streamed/irregular mp4s; treat that as "unknown" rather
+                // than "too short" so we don't discard a valid recording.
+                var d = v.duration;
+                finish(isFinite(d) && d > 0 ? d : null);
+              };
+              v.onerror = function () { finish(null); };
+              // Safety timeout in case metadata never fires.
+              setTimeout(function () { finish(null); }, 1500);
+              v.src = url;
+            } catch (e) {
+              resolve(null);
+            }
+          });
+        }
+
+        function recordOnce(mimeType) {
+          return new Promise(function (resolve, reject) {
+            var recorder;
+            try {
+              recorder = mimeType
+                ? new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 })
+                : new MediaRecorder(stream);
+            } catch (e) {
+              reject(e);
+              return;
+            }
+
+            var chunks = [];
+            recorder.ondataavailable = function (e) {
+              if (e.data && e.data.size > 0) chunks.push(e.data);
+            };
+            recorder.onerror = function (e) {
+              reject(e);
+            };
+            recorder.onstop = function () {
+              var actualType = recorder.mimeType || mimeType || "video/webm";
+              var blob = new Blob(chunks, { type: actualType });
+              resolve(blob);
+            };
+
+            // Frequent timeslices keep chunks small so onstop always has
+            // data even if the very last dataavailable event lands late.
+            recorder.start(100);
+
+            var frameIdx = 0;
+            var nextFrameAt = null;
+            var startedAt = performance.now();
+            function tick(now) {
+              if (nextFrameAt === null) nextFrameAt = now;
+              if (now >= nextFrameAt) {
+                renderScene(octx, frameTs[frameIdx], videoExportState);
+                frameIdx++;
+                nextFrameAt += frameIntervalMs;
+                if (nextFrameAt < now) nextFrameAt = now + frameIntervalMs;
+              }
+              if (frameIdx < frameTs.length) {
+                requestAnimationFrame(tick);
+              } else {
+                renderScene(octx, 1, videoExportState);
+                // Stop once we've actually spent roughly the intended
+                // animation time recording, rather than a fixed guess —
+                // guards against the automatic sampler needing a bit
+                // longer to catch up on slower devices.
+                var elapsed = performance.now() - startedAt;
+                var minRecordMs = animFrameCount * frameIntervalMs + holdFrameCount * frameIntervalMs;
+                var extraWait = Math.max(300, minRecordMs - elapsed + 300);
+                setTimeout(function () {
+                  if (recorder.state !== "inactive") recorder.stop();
+                }, extraWait);
+              }
+            }
+            requestAnimationFrame(tick);
+          });
+        }
+
+        var mp4Type = pickSupported(mp4Candidates);
+        var webmType = pickSupported(webmCandidates);
+
         statusText.textContent = "동영상 녹화 중…";
 
-        var frameIdx = 0;
-        var nextFrameAt = null;
-        function tick(now) {
-          if (nextFrameAt === null) nextFrameAt = now;
-          if (now >= nextFrameAt) {
-            renderScene(octx, frameTs[frameIdx], videoExportState);
-            if (manualFrames) track.requestFrame();
-            frameIdx++;
-            nextFrameAt += frameIntervalMs;
-            // if we fell behind (e.g. a long pause), resync instead of
-            // firing a burst of catch-up frames back-to-back
-            if (nextFrameAt < now) nextFrameAt = now + frameIntervalMs;
-          }
-          if (frameIdx < frameTs.length) {
-            requestAnimationFrame(tick);
-          } else {
-            renderScene(octx, 1, videoExportState);
-            if (manualFrames) track.requestFrame();
-            
-            // 2. 딜레이시간을 60ms에서 2000ms(2초)로 변경
-            setTimeout(function () { recorder.stop(); }, 2000); 
-          }
+        function finishWithBlob(blob, ext) {
+          downloadBlob(blob, "polaroid." + ext);
+          statusText.textContent = "동영상 저장 완료 (" + vw + "×" + vh + ")";
+          resetVideoButtons();
         }
-        requestAnimationFrame(tick);
+
+        function recordWebmFallback() {
+          if (!webmType) {
+            statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요.";
+            resetVideoButtons();
+            return;
+          }
+          statusText.textContent = "MP4 저장에 실패해 다른 형식으로 다시 시도 중…";
+          recordOnce(webmType).then(function (blob) {
+            finishWithBlob(blob, "webm");
+          }).catch(function () {
+            statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
+            resetVideoButtons();
+          });
+        }
+
+        if (mp4Type) {
+          recordOnce(mp4Type).then(function (blob) {
+            // Guard against the "encoder reports success but only kept
+            // the first couple of frames" failure mode: if the resulting
+            // clip's duration is wildly shorter than intended (or the
+            // blob is suspiciously tiny), fall back to webm instead of
+            // silently handing the user a broken 1–3s file.
+            var tooSmall = blob.size < 20000;
+            getBlobDurationSeconds(blob).then(function (dur) {
+              var tooShort = dur !== null && dur < expectedSeconds * 0.5;
+              if (tooSmall || tooShort) {
+                recordWebmFallback();
+              } else {
+                finishWithBlob(blob, "mp4");
+              }
+            });
+          }).catch(function () {
+            recordWebmFallback();
+          });
+        } else {
+          recordWebmFallback();
+        }
       } catch (errStart) {
         statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요.";
         resetVideoButtons();

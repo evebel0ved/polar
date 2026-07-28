@@ -1203,7 +1203,11 @@ ctx.fill();
     }
     state.playing = true;
     playPreviewBtn.textContent = "■ 정지";
-    var duration = state.gifSeconds * 1000;
+    var photoCount = 1
+  + (state.photoImg2 ? 1 : 0)
+  + (state.photoImg3 ? 1 : 0);
+
+var duration = state.gifSeconds * photoCount * 1000;
     var start = performance.now();
     function tick(now) {
       var t = clamp((now - start) / duration, 0, 1);

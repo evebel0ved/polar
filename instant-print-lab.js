@@ -1137,7 +1137,47 @@ var duration = state.gifSeconds * photoCount * 1000;
   // ---------------------------------------------------------------------
   // PNG export — same composition, rendered at N× resolution
   // ---------------------------------------------------------------------
-  function downloadBlob(blob, filename) {
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function isAndroid() {
+    return /Android/.test(navigator.userAgent);
+  }
+
+  // Mobile browsers (iOS Safari/Chrome, many Android in-app/webview
+  // browsers) don't reliably honor `<a download>` on blob: URLs — instead
+  // of saving the file they just navigate to/preview the blob, so nothing
+  // ever reaches Photos/Downloads. Where the Web Share API can share a
+  // File, that's the reliable path there, since it hands off to the
+  // native "Save Image"/"Save to Files" sheet. If sharing isn't available,
+  // we fall back to opening the image in a new tab so the user can
+  // long-press → Save Image.
+  function downloadBlob(blob, filename, existingWin) {
+    var mobile = isIOS() || isAndroid();
+
+    if (mobile && navigator.canShare && window.File) {
+      try {
+        var file = new File([blob], filename, { type: blob.type || "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file] }).catch(function () {
+            openBlobInNewTab(blob, filename, existingWin);
+          });
+          if (existingWin) { try { existingWin.close(); } catch (e) {} }
+          return;
+        }
+      } catch (shareErr) {
+        // fall through to other strategies below
+      }
+    }
+
+    if (mobile) {
+      openBlobInNewTab(blob, filename, existingWin);
+      return;
+    }
+
+    // Desktop browsers: the classic <a download> approach works fine.
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
@@ -1145,16 +1185,47 @@ var duration = state.gifSeconds * photoCount * 1000;
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
-  
+
     setTimeout(function () {
       a.remove();
       URL.revokeObjectURL(url);
     }, 10000);
   }
 
+  // Opens the file in a new tab as a fallback save path for mobile
+  // browsers that won't honor `<a download>` on blob URLs. iOS Safari's
+  // popup blocker kills window.open() calls made outside a direct user
+  // gesture (e.g. after an async toBlob/setTimeout), so callers open a
+  // blank tab synchronously inside the click handler and pass it in here
+  // once the blob is ready, instead of calling window.open() at this
+  // point (which would already be too late on iOS).
+  function openBlobInNewTab(blob, filename, existingWin) {
+    var url = URL.createObjectURL(blob);
+    var win = existingWin || window.open("", "_blank");
+    if (win) {
+      win.location.href = url;
+    } else {
+      // popup blocked and no pre-opened tab available — last resort
+      window.location.href = url;
+    }
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+
   downloadPngBtn.addEventListener("click", function () {
     downloadPngBtn.disabled = true;
     statusText.textContent = "PNG 렌더링 중… (×" + state.scale + ")";
+
+    // On iOS Safari, window.open() only succeeds when called synchronously
+    // inside the click handler — any later call (e.g. after the render's
+    // setTimeout/toBlob) gets treated as a popup and blocked. So on
+    // mobile we open a blank tab right now, and just navigate it once the
+    // PNG blob is ready.
+    var mobile = isIOS() || isAndroid();
+    var preOpenedWin = null;
+    if (mobile && !(navigator.canShare && window.File)) {
+      preOpenedWin = window.open("", "_blank");
+    }
+
     setTimeout(function () {
       var scale = state.scale;
       var off = document.createElement("canvas");
@@ -1167,8 +1238,16 @@ var duration = state.gifSeconds * photoCount * 1000;
       var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
       renderScene(octx, 1, pngState);
       off.toBlob(function (blob) {
-        downloadBlob(blob, "instant-print-card.png");
-        statusText.textContent = "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
+        if (!blob) {
+          statusText.textContent = "PNG 저장 중 오류가 발생했어요.";
+          if (preOpenedWin) { try { preOpenedWin.close(); } catch (e) {} }
+          downloadPngBtn.disabled = false;
+          return;
+        }
+        downloadBlob(blob, "instant-print-card.png", preOpenedWin);
+        statusText.textContent = mobile
+          ? "PNG 준비 완료 — 새 탭에서 이미지를 길게 눌러 저장하세요."
+          : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
         downloadPngBtn.disabled = false;
       }, "image/png");
     }, 30);

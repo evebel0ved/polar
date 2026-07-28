@@ -1711,15 +1711,30 @@ var offset =
             recorder.start(100);
 
             var frameIdx = 0;
-            var nextFrameAt = null;
+            var recordingStartTime = null;
             var startedAt = performance.now();
             function tick(now) {
-              if (nextFrameAt === null) nextFrameAt = now;
-              if (now >= nextFrameAt) {
-                renderScene(octx, frameTs[frameIdx], videoExportState);
-                frameIdx++;
-                nextFrameAt += frameIntervalMs;
-                if (nextFrameAt < now) nextFrameAt = now + frameIntervalMs;
+              if (recordingStartTime === null) recordingStartTime = now;
+              // Compute which frame we *should* be on based on actual
+              // elapsed time, rather than advancing by one frame per rAF
+              // callback. On environments where a single renderScene()
+              // call costs more than frameIntervalMs (e.g. desktop Chrome,
+              // where the export canvas is 1.6x scale vs Android's capped
+              // 1.0x), rAF callbacks arrive slower than the frame rate —
+              // advancing one frame at a time then meant the recorded
+              // clip's real-world duration stretched out to match however
+              // long rendering actually took, instead of the intended
+              // length. Jumping frameIdx to match elapsed time keeps the
+              // recorded video's length correct regardless of how long
+              // rendering takes per frame.
+              var elapsedSinceStart = now - recordingStartTime;
+              var targetFrameIdx = Math.min(
+                frameTs.length - 1,
+                Math.floor(elapsedSinceStart / frameIntervalMs)
+              );
+              if (targetFrameIdx >= frameIdx) {
+                renderScene(octx, frameTs[targetFrameIdx], videoExportState);
+                frameIdx = targetFrameIdx + 1;
               }
               if (frameIdx < frameTs.length) {
                 requestAnimationFrame(tick);

@@ -1128,7 +1128,7 @@ var duration = state.gifSeconds * photoCount * 1000;
         rafId = requestAnimationFrame(tick);
       } else {
         state.playing = false;
-        playPreviewBtn.textContent = "▶ 배출 애니메이션 미리보기";
+        playPreviewBtn.textContent = "▶ MOTION PREVIEW";
       }
     }
     rafId = requestAnimationFrame(tick);

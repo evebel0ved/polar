@@ -1150,21 +1150,35 @@ var duration = state.gifSeconds * photoCount * 1000;
   // just opens/previews the image instead of saving it. The only way to
   // get a real "Save Image" prompt without leaving the page is the Web
   // Share API with a File — it opens the native share sheet, which has a
-  // "Save Image" action. No new tab is opened for iOS at all.
-  // Android in-app browsers (KakaoTalk etc.) often lack navigator.share
-  // with file support, so they keep the new-tab long-press fallback.
-  function downloadBlob(blob, filename, existingWin) {
+  // "Save Image" action.
+  // IMPORTANT: navigator.share() can fail silently on iOS for larger
+  // files (e.g. multi-photo videos) without throwing a distinguishable
+  // "user cancelled" error — so we can't tell a real cancel apart from a
+  // real failure. To stay safe, any rejection falls through to the
+  // direct-navigation fallback below rather than assuming success.
+  // onResult(true) is called once the share sheet actually opens
+  // (success is then up to the user); onResult(false) means we fell back
+  // to the direct-navigation path instead.
+  function downloadBlob(blob, filename, existingWin, onResult) {
     var ios = isIOS();
     var android = isAndroid();
+    function done(shared) { if (onResult) onResult(shared); }
 
     if (ios) {
       if (navigator.canShare && window.File) {
         try {
           var iosFile = new File([blob], filename, { type: blob.type || "image/png" });
           if (navigator.canShare({ files: [iosFile] })) {
-            navigator.share({ files: [iosFile] }).catch(function () {
-              // user cancelled the share sheet — nothing else to do,
-              // no new tab is opened on iOS per user preference
+            navigator.share({ files: [iosFile] }).then(function () {
+              done(true);
+            }).catch(function () {
+              // Could be a real user cancel OR a silent failure (common
+              // on iOS once the file gets large) — either way, fall back
+              // to direct navigation so the user still gets a save path.
+              var iosUrl2 = URL.createObjectURL(blob);
+              window.location.href = iosUrl2;
+              setTimeout(function () { URL.revokeObjectURL(iosUrl2); }, 60000);
+              done(false);
             });
             return;
           }
@@ -1178,7 +1192,7 @@ var duration = state.gifSeconds * photoCount * 1000;
       var iosUrl = URL.createObjectURL(blob);
       window.location.href = iosUrl;
       setTimeout(function () { URL.revokeObjectURL(iosUrl); }, 60000);
-      return;
+      done(false);
     }
 
     if (android) {
@@ -1197,6 +1211,7 @@ var duration = state.gifSeconds * photoCount * 1000;
         androidA.remove();
         URL.revokeObjectURL(androidUrl);
       }, 10000);
+      done(true);
       return;
     }
 
@@ -1213,6 +1228,7 @@ var duration = state.gifSeconds * photoCount * 1000;
       a.remove();
       URL.revokeObjectURL(url);
     }, 10000);
+    done(true);
   }
 
   // Many Android WebViews (KakaoTalk/Instagram in-app browsers especially)
@@ -1275,10 +1291,13 @@ var duration = state.gifSeconds * photoCount * 1000;
           downloadPngBtn.disabled = false;
           return;
         }
-        downloadBlob(blob, "instant-print-card.png", preOpenedWin);
-        statusText.textContent = isIOS()
-          ? "PNG 준비 완료 — 공유창에서 '이미지 저장'을 눌러주세요."
-          : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
+        downloadBlob(blob, "instant-print-card.png", preOpenedWin, function (shared) {
+          statusText.textContent = isIOS()
+            ? (shared
+                ? "PNG 준비 완료 — 공유창에서 '이미지 저장'을 눌러주세요."
+                : "PNG 준비 완료 — 이미지를 길게 눌러 저장해 주세요.")
+            : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
+        });
         downloadPngBtn.disabled = false;
       }, "image/png");
     }, 30);
@@ -1692,12 +1711,20 @@ var offset =
 
         var fps = 30;
         var stream, track = null, manualFrames = false;
-        try {
-          stream = off.captureStream(0);
-          track = stream.getVideoTracks && stream.getVideoTracks()[0];
-          manualFrames = !!(track && typeof track.requestFrame === "function");
-        } catch (probeErr) {
-          manualFrames = false;
+        // track.requestFrame() (manual-frame pushing) is unreliable on
+        // Android — the recorder there often ignores the pushed frames
+        // and just ends up encoding a near-empty ~1s stream. Force the
+        // standard captureStream(fps) path there instead, where the
+        // browser pulls frames on its own timer and actually respects
+        // the animation loop below.
+        if (!isAndroid()) {
+          try {
+            stream = off.captureStream(0);
+            track = stream.getVideoTracks && stream.getVideoTracks()[0];
+            manualFrames = !!(track && typeof track.requestFrame === "function");
+          } catch (probeErr) {
+            manualFrames = false;
+          }
         }
         if (!manualFrames) {
           stream = off.captureStream(fps);
@@ -1741,10 +1768,19 @@ for (var i = 0; i < candidates.length; i++) {
       type: actualType
     });
 
-    downloadBlob(blob, "polaroid." + ext);
+    if (!blob.size) {
+      statusText.textContent = "동영상 저장 중 오류가 발생했어요. 사진 수를 줄이거나 화질을 낮춰서 다시 시도해 주세요.";
+      resetVideoButtons();
+      return;
+    }
 
-    statusText.textContent =
-      "동영상 저장 완료 (" + vw + "×" + vh + ")";
+    downloadBlob(blob, "polaroid." + ext, null, function (shared) {
+      statusText.textContent = isIOS()
+        ? (shared
+            ? "동영상 준비 완료 — 공유창에서 '비디오 저장'을 눌러주세요."
+            : "동영상 준비 완료 — 새로 열린 화면에서 저장해 주세요.")
+        : "동영상 저장 완료 (" + vw + "×" + vh + ")";
+    });
 
   } catch (errStop) {
     console.error(errStop);
@@ -1792,12 +1828,16 @@ var animMs = state.gifSeconds * photoCount * 1000;
           } else {
             renderScene(octx, 1, videoExportState);
             if (manualFrames) track.requestFrame();
-            setTimeout(function () { recorder.stop(); }, 60);
+            // Give the encoder enough headroom to flush the final frames
+            // before stopping — too short a delay here is part of why
+            // the standard captureStream(fps) path (used on Android)
+            // can end up truncating the tail of the recording.
+            setTimeout(function () { recorder.stop(); }, manualFrames ? 60 : 250);
           }
         }
         requestAnimationFrame(tick);
       } catch (errStart) {
-        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요.";
+        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. GIF 저장을 이용해 주세요.";
         resetVideoButtons();
       }
     });

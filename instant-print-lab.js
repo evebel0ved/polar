@@ -4,7 +4,10 @@
   // ---------------------------------------------------------------------
   // Constants & state
   // ---------------------------------------------------------------------
-
+  // W is fixed; H now depends on orientation (see applyOrientationDims) —
+  // vertical exports/preview use a square canvas, horizontal uses a
+  // shorter canvas (less empty space above/below). Both get corrected
+  // by applyOrientationDims() before the very first render.
   var W = 1400, H = 800;
 
   var CAMERA_COLORS = [
@@ -81,6 +84,7 @@
   var bgSwatchGrid = document.getElementById("bgSwatchGrid");
   var bgColorBlock = document.getElementById("bgColorBlock");
   var bgModeColorBtn = document.getElementById("bgModeColor");
+  var bgModeBlurBtn = document.getElementById("bgModeBlur");
   var bgNote = document.getElementById("bgNote");
   var orientVerticalBtn = document.getElementById("orientVertical");
   var orientHorizontalBtn = document.getElementById("orientHorizontal");
@@ -159,29 +163,65 @@
   }
 
   // ---------------------------------------------------------------------
-  // Scene layout 
+  // Scene layout (logical W×H coordinate space — fixed per orientation
+  // regardless of device, so preview and every exported file share one
+  // composition). W is always 1400; H is 800 for horizontal or 1400
+  // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
+  // How far above the camera's top edge (L.bodyY) the vertical eject
+  // animation's start position sits. Safe to set above 0 only because
+  // drawPhotoCard hard-clips the card to L.bodyY and below on every
+  // frame — this constant only affects how much eject motion is spent
+  // before the card is visible, never what actually renders/exports.
   var VERTICAL_START_LIFT = 70;
 
-  var VERTICAL_MARGIN = 180;
+  // Fixed top/bottom margin for vertical layout. Raised 40 -> 90 for
+  // noticeably more breathing room around the camera+card group (the
+  // square canvas side length in applyOrientationDims grows with this,
+  // so margins scale directly with this one constant).
+  var VERTICAL_MARGIN = 90;
 
   var CARD_DIMS = {
+    // vertical card is narrower than the (now bigger) camera body so the
+    // ejected photo stays visually contained within the camera's footprint
+    // instead of poking out past its left/right edges
     vertical:   { w: 420, h: 500, side: "bottom", margin: 92 },
-
+    // horizontal card enlarged (324 -> 380) so the photo now extends up
+    // into the shoulder-plate area instead of stopping at the lens
+    // centerline — see drawPhotoCard's horizontal `top` calc, which
+    // anchors from L.bodyY with a fixed clearance instead of centering
+    // on cameraCenter(). Height chosen (with that anchor) so even the
+    // 3rd stacked photo's stack.y offset + drop shadow stay inside
+    // L.bodyY..L.bodyY+L.bodyH — never pokes out past the camera body.
     horizontal: { w: 480, h: 380, side: "right",  margin: 92 }
   };
 
+  // horizontal (landscape) layout — card ejects sideways from under the
+  // camera's right edge, so the canvas only needs to be tall enough for
+  // the camera body itself. Recomputed off the current H so the reduced
+  // (non-square) horizontal canvas still keeps the camera vertically
+  // centered instead of assuming a fixed 1000px-tall canvas.
   function computeHorizontalLayout() {
     var bodyW = 620, bodyH = 424, bodyR = 36, shoulderH = 94;
     var bodyY = Math.max(24, Math.round((H - bodyH) / 2) - 18);
     return { bodyX: 180, bodyY: bodyY, bodyW: bodyW, bodyH: bodyH, bodyR: bodyR, shoulderH: shoulderH };
   }
 
+  // vertical (portrait) layout — camera sits near the top, card ejects
+  // straight down. Enlarged (same 620:424 body ratio, so every hardware
+  // element positioned/sized off bw/bh/k inside drawCamera scales
+  // automatically). With the canvas now square, the whole camera+card
+  // group is vertically centered in the available height rather than
+  // pinned near the top, so the extra square space reads as intentional
+  // framing instead of empty padding.
   function computeVerticalLayout() {
     var VERTICAL_SCALE = 580 / 620;
     var bodyW = 620 * VERTICAL_SCALE, bodyH = 424 * VERTICAL_SCALE,
         bodyR = 36 * VERTICAL_SCALE, shoulderH = 94 * VERTICAL_SCALE;
-    
+    // Canvas height is now sized (in applyOrientationDims) to exactly fit
+    // this content plus VERTICAL_MARGIN on each side, so bodyY is just
+    // that fixed margin rather than a centering calc against a much
+    // taller canvas.
     var bodyY = VERTICAL_MARGIN;
     return {
       bodyX: (W - bodyW) / 2,
@@ -194,8 +234,19 @@
     return orientation === "vertical" ? computeVerticalLayout() : computeHorizontalLayout();
   }
 
+  // Sets W/H for the chosen orientation and resizes the actual <canvas>
+  // element to match, so the preview's intrinsic aspect ratio (and every
+  // export, which reads W/H at save time) always matches what's selected.
   function applyOrientationDims(orientation) {
     if (orientation === "vertical") {
+      // Square canvas (W === H), sized directly off the real content
+      // height (camera body + ejected card, at vertical layout's
+      // proportions) plus VERTICAL_MARGIN on each side. Previously only
+      // H was tightened here while W stayed fixed at 1400 (horizontal
+      // mode's width), which left the "square" vertical canvas actually
+      // a 1400x977 rectangle. Deriving both from the same content-based
+      // side length keeps it genuinely square with margins that scale
+      // with VERTICAL_MARGIN instead of leftover horizontal-mode width.
       var vs = 580 / 620;
       var contentH = 424 * vs + CARD_DIMS.vertical.h;
       var side = Math.round(contentH + VERTICAL_MARGIN * 2);
@@ -220,12 +271,32 @@
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
+    // Reduced from 60 to 20: at full eject (e=1) the card now sits
+    // further right, showing more of the printed photo out from under
+    // the camera body instead of leaving 60px of it still tucked
+    // underneath. Still keeps a small (20px) overlap so the card visibly
+    // connects to the camera rather than looking fully detached.
     var endX = rightEdge - 20;
     return lerp(startX, endX, e);
   }
 
+  // vertical orientation: card ejects straight down — starts fully behind
+  // the camera body (never above its top edge) and slides down to rest
+  // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
+    // Start position is L.bodyY - VERTICAL_START_LIFT (above the
+    // camera's own top edge) rather than flush with it or centered on
+    // card height. This relies entirely on drawPhotoCard's hard clip at
+    // L.bodyY (added alongside this): whatever part of the card sits
+    // above L.bodyY is clipped away every frame, in both preview and
+    // every export, so lifting this start position can never actually
+    // show or save anything above the camera — it only changes how much
+    // of the eject motion happens before the card first peeks out from
+    // under the camera body. (Previously this used
+    // max(bodyBottom - cardH + 56, ...), but that term doesn't scale
+    // with the vertical margin and silently overrode the lift once the
+    // margin grew — the lift is now applied directly.)
     var startY = L.bodyY - VERTICAL_START_LIFT;
     var endY = bodyBottom;
     return lerp(startY, endY, e);
@@ -236,6 +307,11 @@
   // ---------------------------------------------------------------------
   function drawColorBackground(ctx, colorDef) {
     var isDark = isDarkColor(colorDef.body);
+    // light backgrounds are pre-lightened before building the gradient;
+    // already-dark colors (charcoal/ink/slate/…) are left exactly as-is.
+    // Raised 38 -> 58: the previous value still read as fairly saturated
+    // on lighter swatches; this pushes them noticeably closer to a pale
+    // pastel while dark swatches are untouched.
     var base = isDark ? colorDef.body : shade(colorDef.body, 58);
     var edge = isDark ? shade(colorDef.body, -35) : shade(base, -4);
     var g = ctx.createRadialGradient(W * 0.32, H * 0.28, 60, W * 0.5, H * 0.55, W * 0.8);
@@ -252,6 +328,15 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Some mobile browsers (notably several mobile WebViews / Samsung
+  // Internet / in-app browsers) silently ignore ctx.filter at *draw* time
+  // even though they happily store and echo back ctx.filter as a string —
+  // so the old check (`probe.filter === "blur(2px)"`) reported "supported"
+  // on exactly the devices where the background then rendered unblurred.
+  // This version actually draws a hard-edged shape with a blur filter onto
+  // a tiny offscreen canvas and inspects the resulting pixels: if the edge
+  // pixel isn't measurably softened, real blur rendering isn't happening,
+  // regardless of what the filter property claims.
   var _canvasFilterSupport = null;
   function supportsCanvasFilter() {
     if (_canvasFilterSupport !== null) return _canvasFilterSupport;
@@ -264,7 +349,9 @@
         _canvasFilterSupport = false;
         return _canvasFilterSupport;
       }
-      
+      // left half solid black, right half left transparent, then blur it —
+      // a real blur will bleed some black into the right half; a no-op
+      // filter leaves the right half fully transparent (alpha 0).
       probe.clearRect(0, 0, size, size);
       probe.fillStyle = "#000000";
       probe.fillRect(0, 0, size / 2, size);
@@ -278,6 +365,10 @@
     return _canvasFilterSupport;
   }
 
+  // Manual blur fallback for browsers without ctx.filter support: drawing
+  // the source image far smaller and letting the browser's own bitmap
+  // smoothing scale it back up approximates a soft gaussian blur without
+  // depending on the filter API at all, so it works everywhere.
   function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
     var factor = clamp(blurRadius / 3, 6, 60);
     var smallW = Math.max(6, Math.round(destW / factor));
@@ -319,12 +410,18 @@
   }
 
   function drawBackground(ctx, bgColorDef, bgMode, photoImg) {
-  ctx.clearRect(0, 0, W, H);
-  drawColorBackground(ctx, bgColorDef);
-}
+    ctx.clearRect(0, 0, W, H);
+    if (bgMode === "blur" && photoImg) {
+      drawBlurredPhotoBackground(ctx, photoImg);
+    } else {
+      drawColorBackground(ctx, bgColorDef);
+    }
+  }
 
   // ---------------------------------------------------------------------
-  // Camera — detailed body render 
+  // Camera — detailed body render (rounded-body instant camera with a
+  // large center lens, inspired by classic instant-camera proportions —
+  // no brand names or wordmarks are drawn anywhere on the body/lens)
   // ---------------------------------------------------------------------
   function drawToggleKnob(ctx, x, y, r, body, isDark) {
     ctx.save();
@@ -396,6 +493,9 @@
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.stroke();
 
+    // protruding grip lever — a small metallic tab sticking out past the
+    // collar, like a manual advance/rewind lever, so the knob reads as a
+    // real turnable control rather than a flat disc
     var leverAngle = -Math.PI / 2 - 0.25;
     ctx.save();
     ctx.translate(x, y);
@@ -412,7 +512,9 @@
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.stroke();
     ctx.restore();
-    
+
+    // single index dot marking the lever's resting position (replaces the
+    // old pair of overlapping dots for a cleaner face)
     var idx = x + Math.cos(leverAngle) * r * 0.4;
     var idy = y + Math.sin(leverAngle) * r * 0.4;
     ctx.beginPath();
@@ -657,9 +759,19 @@
     ctx.strokeStyle = "#e0e0e0"; // 연한 회색/흰색 테두리로 변경
     ctx.stroke();
 
+    // faint top hardware — strap lug (left) and geared advance dial with
+    // strap lug (right), both low-contrast like the reference photo.
+    // Pulled further above the top edge (by - 12*k instead of by - 1/2*k)
+    // so neither shape overlaps the body's border stroke, widened, and
+    // the right-hand dial moved further right and away from the button
+    // below it.
     drawTopNub(ctx, bx + bw * 0.22, by - 12 * k, 34 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
     drawGearedTopDial(ctx, bx + bw * 0.78, by - 12 * k, 60 * k, 8 * k, isDark);
 
+    // shoulder plate — a neutral silver-grey top panel, independent of the
+    // body shell color (matches the reference: the top plate reads as a
+    // fixed metal/plastic tone across every colorway, only going dark on
+    // the charcoal body)
     var plateColor = isDark ? shade(body, -4) : "#d8d7d3";
     roundRectPath(ctx, bx, by, bw, L.shoulderH, { tl: L.bodyR, tr: L.bodyR, br: 0, bl: 0 });
     var plateGrad = ctx.createLinearGradient(0, by, 0, by + L.shoulderH);
@@ -705,7 +817,11 @@
     var c = cameraCenter(L);
     drawToggleKnob(ctx, bx + bw * 0.11, by + bh * 0.84, bw * 0.054, body, isDark);
 
-    // 바디 하이라이트
+    // 바디 하이라이트 (상단에 위치 — 빛이 위에서 들어오는 느낌)
+    // uses a radial gradient (opaque near the top-left corner, fading to
+    // fully transparent) instead of a flat-alpha shape, so it blends
+    // softly into the body instead of ending on a hard edge; clipped to
+    // the rounded body path so it can't poke out past the corner.
     ctx.save();
     roundRectPath(ctx, bx, by, bw, bh, L.bodyR);
     ctx.clip();
@@ -830,10 +946,21 @@ ctx.fill();
       left = (W - dims.w) / 2;
       top = cardTopAt(e, dims.h, L);
     } else {
+      // Anchored from the body's top edge with a small fixed clearance,
+      // instead of vertically centering on cameraCenter() (the lens
+      // area below the shoulder plate). Centering on the lens left ~97px
+      // of unused headroom above the card that overlapped the shoulder
+      // plate but was never used — this reclaims that space so the photo
+      // extends up into the shoulder area, while the fixed clearance
+      // (rather than a center calc) keeps the math simple to reason
+      // about for the bottom-edge safety check below.
       var topClearance = 16;
       left = cardLeftAt(e, dims.w, L);
       top = L.bodyY + topClearance;
     }
+    // stacked photos (2nd/3rd) settle slightly offset & rotated from the
+    // first, like a scattered pile of instant prints, instead of sitting
+    // in an identical spot on top of one another
     left += stack.x || 0;
     top += stack.y || 0;
 
@@ -842,6 +969,16 @@ ctx.fill();
 
     ctx.save();
     if (orientation === "vertical") {
+      // Hard clip at the camera body's top edge: nothing drawn for this
+      // card (fill OR its drop-shadow) can render above L.bodyY. Applied
+      // in world space, before the stack-rotation transform below, so it
+      // holds regardless of stack.rot. This is what actually guarantees
+      // the card never visibly pokes out above the camera — previously
+      // that guarantee came only from keeping cardTopAt's start position
+      // far enough below L.bodyY to out-run the shadow's own spread,
+      // which capped how early the eject animation could start. With the
+      // clip in place, cardTopAt is free to start much closer to the
+      // body's top edge.
       ctx.beginPath();
       ctx.rect(0, L.bodyY, W, H - L.bodyY);
       ctx.clip();
@@ -945,6 +1082,11 @@ ctx.fill();
   // ---------------------------------------------------------------------
   // Scene render
   // ---------------------------------------------------------------------
+  // Splits a single 0..1 phase into (segment index, local eject progress)
+  // across N photo segments. Each segment gets an equal share of the
+  // phase range; within a segment the first 70% is the eject slide
+  // (eased) and the remaining 30% is a hold, so multiple photos don't
+  // eject back-to-back with no pause between them.
   function resolveTimelinePosition(phase, segCount) {
     var p = clamp(phase, 0, 1);
     if (segCount <= 1) {
@@ -959,12 +1101,18 @@ ctx.fill();
     return { idx: idx, localE: localE };
   }
 
+  // Stacked (2nd/3rd) photos settle slightly offset & rotated from the
+  // first, like a scattered pile of instant prints landing on top of
+  // one another, instead of sitting in an identical spot.
   function stackOffsetFor(i) {
     if (i === 0) return { x: 0, y: 0, rot: 0 };
     var dir = i % 2 === 1 ? 1 : -1;
     return { x: dir * (10 + i * 4), y: i * 8, rot: dir * (3 + i * 1.5) };
   }
 
+  // If the label ends in digits (like the default "N° 01"), each stacked
+  // card auto-increments that trailing number; otherwise every card
+  // just repeats the same custom text as-is.
   function serialForIndex(text, i) {
     var base = (text || "").trim() || "N° 01";
     if (i === 0) return base;
@@ -983,11 +1131,17 @@ ctx.fill();
     var bgColorDef = BG_COLORS[st.bgColorIndex];
     drawBackground(ctx, bgColorDef, st.bgMode, st.photoImg);
 
+    // 2nd/3rd photos only ever take part here — PNG export always calls
+    // this with a state clone that has photoImg2/3 cleared, so a plain
+    // still export never shows a stack, per spec.
     var photos = [st.photoImg];
     if (st.photoImg2) photos.push(st.photoImg2);
     if (st.photoImg3) photos.push(st.photoImg3);
     var pos = resolveTimelinePosition(phase, photos.length);
 
+    // cards drawn first (in stacking order), camera drawn on top — the
+    // part of each card still "inside" the body gets covered by the
+    // camera, giving the eject effect
     for (var i = 0; i <= pos.idx; i++) {
       var e = (i < pos.idx) ? 1 : pos.localE;
       drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
@@ -999,7 +1153,7 @@ ctx.fill();
   function render() {
     renderScene(ctxStage, state.phase, state);
     specCamera.textContent = CAMERA_COLORS[state.cameraColorIndex].label;
-    specBg.textContent = BG_COLORS[state.bgColorIndex].label;
+    specBg.textContent = state.bgMode === "blur" ? "PHOTO BLUR" : BG_COLORS[state.bgColorIndex].label;
     specOrient.textContent = state.orientation === "horizontal" ? "가로" : "세로";
     specScale.textContent = "×" + state.scale;
     phaseLabel.textContent = state.phase >= 1 ? "FRAME — STATIC" : "FRAME — EJECTING";
@@ -1044,12 +1198,15 @@ ctx.fill();
   }
 
   function setBgMode(mode) {
-  state.bgMode = "color";
-  bgModeColorBtn.classList.add("is-active");
-  bgColorBlock.style.display = "";
-  bgNote.textContent = "배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.";
-  render();
-}
+    state.bgMode = mode;
+    bgModeColorBtn.classList.toggle("is-active", mode === "color");
+    bgModeBlurBtn.classList.toggle("is-active", mode === "blur");
+    bgColorBlock.style.display = mode === "blur" ? "none" : "";
+    bgNote.textContent = mode === "blur"
+      ? "업로드한 사진을 흐리게 처리해 배경으로 사용해요. 사진이 없으면 컬러로 표시됩니다."
+      : "배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.";
+    render();
+  }
 
   function setOrientation(orientation) {
     state.orientation = orientation;
@@ -1060,6 +1217,8 @@ ctx.fill();
   }
 
   // slot 1 = state.photoImg (used everywhere), slot 2/3 = state.photoImg2/3
+  // (only ever drawn during GIF/video export & preview, stacked on top of
+  // slot 1 — PNG export always ignores them)
   function handlePhotoFile(file, slot) {
     if (!file || !file.type.match(/^image\//)) return;
     var reader = new FileReader();
@@ -1106,7 +1265,7 @@ ctx.fill();
   }
 
   bgModeColorBtn.addEventListener("click", function () { setBgMode("color"); });
-  
+  bgModeBlurBtn.addEventListener("click", function () { setBgMode("blur"); });
 
   orientVerticalBtn.addEventListener("click", function () { setOrientation("vertical"); });
   orientHorizontalBtn.addEventListener("click", function () { setOrientation("horizontal"); });
@@ -1199,6 +1358,10 @@ ctx.fill();
   // ---------------------------------------------------------------------
   // GIF export — median-cut palette + LZW encoder (no external libraries)
   // ---------------------------------------------------------------------
+  // Pools color samples across every frame (not just the final still frame)
+  // so the single global palette actually represents the whole animation —
+  // this alone removes most of the visible color-shift/banding between
+  // frames that made saved GIFs look broken.
   function buildPaletteFromFrames(dataArrays, maxColors) {
     var samples = [];
     var strideEach = Math.max(4 * 6, Math.floor((4 * 5 * dataArrays.length) / 3));
@@ -1275,6 +1438,13 @@ ctx.fill();
     63, 31, 55, 23, 61, 29, 53, 21
   ];
 
+  // Ordered (Bayer) dithering: nudges each pixel by a small, fixed amount
+  // that only depends on its (x, y) position — not on neighboring pixels
+  // or prior frames. That fixed pattern is what makes it work well for
+  // *animated* GIFs: it still breaks up hard 256-color bands on this app's
+  // smooth gradients, but (unlike error-diffusion dithering) the pattern
+  // stays put from frame to frame instead of shifting/shimmering, which is
+  // what made the animation look noisy/broken rather than smoother.
   function imageDataToIndicesOrderedDither(data, w, h, nearestIndexFn, strength) {
     strength = strength || 20;
     var out = new Uint8Array(w * h);
@@ -1302,6 +1472,12 @@ ctx.fill();
   }
 
   // --- byte writer ---------------------------------------------------------
+  // Growable Uint8Array-backed buffer instead of a plain JS array with
+  // .push(). A hand-rolled GIF of several megapixels × many frames can
+  // produce tens of millions of bytes; pushing that many numbers onto a
+  // plain array is slow and memory-heavy enough to crash the tab (this is
+  // the page-error-after-saving bug). Doubling a typed array is both much
+  // faster and much lighter on memory.
   function ByteWriter() {
     this.buf = new Uint8Array(1 << 16);
     this.len = 0;
@@ -1519,6 +1695,14 @@ ctx.fill();
 
     setTimeout(function () {
       try {
+        // Raised from 1.6 to 2.2: on high-density phone screens (2x-3x
+        // device pixel ratio) a 1.6x export (2240x1280) still gets
+        // upscaled by the OS/gallery viewer when opened at normal size,
+        // which blows the fixed 8x8 Bayer dither pattern up into visible
+        // "grain" without the user needing to pinch-zoom. At 2.2x
+        // (3080x1760) each dither cell maps to a smaller fraction of the
+        // screen, so the pattern stays below the eye's resolving power at
+        // normal viewing sizes.
         var gifScale = 2.2;
         var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
         var off = document.createElement("canvas");
@@ -1526,6 +1710,9 @@ ctx.fill();
         var octx = off.getContext("2d");
         octx.scale(gifScale, gifScale);
 
+        // more photos in the stack means more frames overall, so trim the
+        // per-segment step count a bit past 1 photo to keep total frame
+        // count (and encode time/file size) reasonable
         var photoCount = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var slideSteps = photoCount > 1 ? 10 : 16;
         var holdSteps = photoCount > 1 ? 3 : 6;
@@ -1547,6 +1734,8 @@ ctx.fill();
         statusText.textContent = "GIF 색상 팔레트 계산 중…";
         setTimeout(function () {
           try {
+            // palette pooled across every frame — not just the last still
+            // frame — so colors stay consistent through the whole animation
             var palette = buildPaletteFromFrames(rawFrames.map(function (f) { return f.data; }), 256);
             var nearest = makeNearestIndexFn(palette);
 
@@ -1554,7 +1743,18 @@ ctx.fill();
             setTimeout(function () {
               try {
                 var frames = rawFrames.map(function (imgData) {
+                  // ordered (Bayer) dithering: smooths gradient banding
+                  // without the frame-to-frame shimmer error-diffusion
+                  // dithering caused on this animation
                   return {
+                    // strength lowered again, 9 -> 5, alongside the export
+                    // resolution bump above. 9 still produced a visible
+                    // dot grid on high-density mobile screens at normal
+                    // (non-zoomed) viewing size. 5 is the smallest nudge
+                    // that still meaningfully breaks flat-color/gradient
+                    // banding into the 256-color palette, while staying
+                    // under the threshold of what's visible without
+                    // zooming in.
                     indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 5),
                     delay: perFrameMs
                   };
@@ -1582,6 +1782,10 @@ ctx.fill();
 
   // ---------------------------------------------------------------------
   // Video (WebM) export — uses the browser's own encoder via
+  // canvas.captureStream() + MediaRecorder, so quality is far higher (and
+  // encoding far faster/lighter) than the hand-rolled GIF path above.
+  // Added as a companion "동영상으로 저장" button placed right after the
+  // GIF button, since no video export existed before.
   // ---------------------------------------------------------------------
   function createVideoButton() {
     if (!downloadGifBtn || !downloadGifBtn.parentNode) return null;
@@ -1669,7 +1873,22 @@ ctx.fill();
         var photoCountForHold = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var holdMs = photoCountForHold > 1 ? 1200 : 900;
         var animMs = state.gifSeconds * 1000;
-        
+
+        // Fixed-timestep frame schedule instead of driving the animation
+        // off real rAF wall-clock deltas. The old tick() computed
+        // `t = elapsed / animMs` from `now` on every rAF callback — but
+        // rAF firing isn't perfectly even (a busy main thread, GC pause,
+        // or a slow paint can delay/skip a callback), and MediaRecorder
+        // doesn't know or care about that: it just samples whatever the
+        // canvas currently shows at its own cadence, so any uneven gap
+        // between renders shows up as a stutter/hitch in the recorded
+        // video even though the on-screen *preview* (which isn't going
+        // through an encoder) never showed one. Precomputing an evenly
+        // spaced phase list up front — same approach already used for
+        // the GIF export above — and pacing delivery with setTimeout at
+        // a fixed target interval makes every frame land at an exact,
+        // predictable spot regardless of how bursty rendering actually
+        // is on the device.
         var recordFps = 30;
         var frameIntervalMs = 1000 / recordFps;
         var animFrameCount = Math.max(1, Math.round(animMs / frameIntervalMs));

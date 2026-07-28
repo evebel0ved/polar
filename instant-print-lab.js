@@ -1742,7 +1742,7 @@ var offset =
       if (recorder.state !== "inactive") {
         recorder.stop();
       }
-    }, 1000); // 마지막 프레임이 인코더에 들어갈 시간 확보
+    }, 1500); // 마지막 프레임이 인코더에 들어갈 시간 확보
   }
 }, extraWait);
                 

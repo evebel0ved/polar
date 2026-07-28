@@ -81,7 +81,6 @@
   var bgSwatchGrid = document.getElementById("bgSwatchGrid");
   var bgColorBlock = document.getElementById("bgColorBlock");
   var bgModeColorBtn = document.getElementById("bgModeColor");
-  var bgModeBlurBtn = document.getElementById("bgModeBlur");
   var bgNote = document.getElementById("bgNote");
   var orientVerticalBtn = document.getElementById("orientVertical");
   var orientHorizontalBtn = document.getElementById("orientHorizontal");
@@ -320,13 +319,9 @@
   }
 
   function drawBackground(ctx, bgColorDef, bgMode, photoImg) {
-    ctx.clearRect(0, 0, W, H);
-    if (bgMode === "blur" && photoImg) {
-      drawBlurredPhotoBackground(ctx, photoImg);
-    } else {
-      drawColorBackground(ctx, bgColorDef);
-    }
-  }
+  ctx.clearRect(0, 0, W, H);
+  drawColorBackground(ctx, bgColorDef);
+}
 
   // ---------------------------------------------------------------------
   // Camera — detailed body render 
@@ -1004,7 +999,7 @@ ctx.fill();
   function render() {
     renderScene(ctxStage, state.phase, state);
     specCamera.textContent = CAMERA_COLORS[state.cameraColorIndex].label;
-    specBg.textContent = state.bgMode === "blur" ? "PHOTO BLUR" : BG_COLORS[state.bgColorIndex].label;
+    specBg.textContent = BG_COLORS[state.bgColorIndex].label;
     specOrient.textContent = state.orientation === "horizontal" ? "가로" : "세로";
     specScale.textContent = "×" + state.scale;
     phaseLabel.textContent = state.phase >= 1 ? "FRAME — STATIC" : "FRAME — EJECTING";
@@ -1049,15 +1044,12 @@ ctx.fill();
   }
 
   function setBgMode(mode) {
-    state.bgMode = mode;
-    bgModeColorBtn.classList.toggle("is-active", mode === "color");
-    bgModeBlurBtn.classList.toggle("is-active", mode === "blur");
-    bgColorBlock.style.display = mode === "blur" ? "none" : "";
-    bgNote.textContent = mode === "blur"
-      ? "업로드한 사진을 흐리게 처리해 배경으로 사용해요. 사진이 없으면 컬러로 표시됩니다."
-      : "배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.";
-    render();
-  }
+  state.bgMode = "color";
+  bgModeColorBtn.classList.add("is-active");
+  bgColorBlock.style.display = "";
+  bgNote.textContent = "배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.";
+  render();
+}
 
   function setOrientation(orientation) {
     state.orientation = orientation;
@@ -1114,7 +1106,7 @@ ctx.fill();
   }
 
   bgModeColorBtn.addEventListener("click", function () { setBgMode("color"); });
-  bgModeBlurBtn.addEventListener("click", function () { setBgMode("blur"); });
+  
 
   orientVerticalBtn.addEventListener("click", function () { setOrientation("vertical"); });
   orientHorizontalBtn.addEventListener("click", function () { setOrientation("horizontal"); });

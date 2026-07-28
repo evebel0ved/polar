@@ -416,9 +416,9 @@
     var leverW = r * 0.34, leverLen = r * 0.62, leverBase = r * 0.68;
     roundRectPath(ctx, -leverW / 2, -(leverBase + leverLen), leverW, leverLen + leverW / 2, leverW / 2);
     var leverGrad = ctx.createLinearGradient(-leverW / 2, 0, leverW / 2, 0);
-    leverGrad.addColorStop(0, "#c9c9c6");
-    leverGrad.addColorStop(0.5, "#efeeea");
-    leverGrad.addColorStop(1, "#9a9a96");
+    leverGrad.addColorStop(0, "#404244");
+    leverGrad.addColorStop(0.5, "#1f2022");
+    leverGrad.addColorStop(1, "#080809");
     ctx.fillStyle = leverGrad;
     ctx.fill();
     ctx.lineWidth = 1;

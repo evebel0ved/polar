@@ -1,4 +1,4 @@
-(function () {
+  (function () {
   "use strict";
 
   // ---------------------------------------------------------------------
@@ -1273,7 +1273,7 @@ ctx.fill();
   // frames that made saved GIFs look broken.
   function buildPaletteFromFrames(dataArrays, maxColors) {
     var samples = [];
-    var strideEach = Math.max(4 * 6, Math.floor((4 * 5 * dataArrays.length) / 3));
+    var strideEach = 4;
     dataArrays.forEach(function (data) {
       for (var i = 0; i < data.length; i += strideEach) {
         samples.push([data[i], data[i + 1], data[i + 2]]);
@@ -1327,7 +1327,9 @@ ctx.fill();
       for (var i = 0; i < palette.length; i++) {
         var p = palette[i];
         var dr = p[0] - r, dg = p[1] - g, db = p[2] - b;
-        var d = dr * dr + dg * dg + db * db;
+        var d = 2 * dr * dr +
+                4 * dg * dg +
+                3 * db * db;
         if (d < bestDist) { bestDist = d; best = i; }
       }
       cache.set(key, best);
@@ -1362,10 +1364,22 @@ ctx.fill();
       var by8 = (y & 7) * 8;
       for (var x = 0; x < w; x++) {
         var di = (rowOff + x) * 4;
-        var offset = (BAYER8[by8 + (x & 7)] / 63 - 0.5) * strength;
-        var r = clamp(data[di] + offset, 0, 255);
-        var g = clamp(data[di + 1] + offset, 0, 255);
-        var b = clamp(data[di + 2] + offset, 0, 255);
+        var lum =
+    data[di] * 0.2126 +
+    data[di + 1] * 0.7152 +
+    data[di + 2] * 0.0722;
+
+// 밝은 곳은 약하게
+// 어두운 곳은 조금 강하게
+var adaptiveStrength =
+    strength * (0.35 + (1 - lum / 255) * 0.65);
+
+var offset =
+    (BAYER8[by8 + (x & 7)] / 63 - 0.5) *
+    adaptiveStrength;
+        var r = clamp(data[di]     + offset * 1.0, 0, 255);
+        var g = clamp(data[di + 1] + offset * 0.8, 0, 255);
+        var b = clamp(data[di + 2] + offset * 0.6, 0, 255);
         out[rowOff + x] = nearestIndexFn(Math.round(r), Math.round(g), Math.round(b));
       }
     }

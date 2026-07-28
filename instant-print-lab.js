@@ -47,7 +47,7 @@
     photoImg: null,
     photoImg2: null,           // 2nd photo — only used for video (stacks on top of photo 1)
     photoImg3: null,           // 3rd photo — only used for video (stacks on top of photo 2)
-    scale: 6,
+    scale: 5,
     gifSeconds: 3,
     phase: 1,
     playing: false

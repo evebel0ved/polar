@@ -185,12 +185,7 @@
     // on cameraCenter(). Height chosen (with that anchor) so even the
     // 3rd stacked photo's stack.y offset + drop shadow stay inside
     // L.bodyY..L.bodyY+L.bodyH — never pokes out past the camera body.
-    // horizontal card size reduced (480x380 -> 380x300, same ratio) so
-    // the ejected photo reads smaller relative to the camera body, per
-    // request — paired with cardLeftAt's wider endX so the smaller card
-    // still ends up ejecting almost to the canvas's right edge instead
-    // of leaving a large gap now that it's narrower.
-    horizontal: { w: 380, h: 300, side: "right",  margin: 76 }
+    horizontal: { w: 480, h: 380, side: "right",  margin: 92 }
   };
 
   // horizontal (landscape) layout — card ejects sideways from under the
@@ -268,10 +263,11 @@
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
     var startX = rightEdge - cardW + 50;
-    // At full eject (e=1) the card stays anchored right at the camera
-    // body's edge (small overlap so it visually connects to the camera
-    // rather than floating away from it) — only the card's own size
-    // (CARD_DIMS.horizontal) was reduced, not how far it travels.
+    // Reduced from 60 to 20: at full eject (e=1) the card now sits
+    // further right, showing more of the printed photo out from under
+    // the camera body instead of leaving 60px of it still tucked
+    // underneath. Still keeps a small (20px) overlap so the card visibly
+    // connects to the camera rather than looking fully detached.
     var endX = rightEdge - 20;
     return lerp(startX, endX, e);
   }

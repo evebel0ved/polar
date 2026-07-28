@@ -45,7 +45,7 @@
   var state = {
     cameraColorIndex: 0,
     bgColorIndex: 0,
-    bgMode: "color",           // "color" | "blur"
+    bgMode: "color",
     orientation: "horizontal", // "vertical" | "horizontal" — horizontal is now default
     captionText: "INSTANT",
     serialText: "N° 01",       // customizable frame-number label printed on the card margin
@@ -83,8 +83,6 @@
   var cameraSwatchGrid = document.getElementById("cameraSwatchGrid");
   var bgSwatchGrid = document.getElementById("bgSwatchGrid");
   var bgColorBlock = document.getElementById("bgColorBlock");
-  var bgModeColorBtn = document.getElementById("bgModeColor");
-  var bgModeBlurBtn = document.getElementById("bgModeBlur");
   var bgNote = document.getElementById("bgNote");
   var orientVerticalBtn = document.getElementById("orientVertical");
   var orientHorizontalBtn = document.getElementById("orientHorizontal");
@@ -328,94 +326,9 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Some mobile browsers (notably several mobile WebViews / Samsung
-  // Internet / in-app browsers) silently ignore ctx.filter at *draw* time
-  // even though they happily store and echo back ctx.filter as a string —
-  // so the old check (`probe.filter === "blur(2px)"`) reported "supported"
-  // on exactly the devices where the background then rendered unblurred.
-  // This version actually draws a hard-edged shape with a blur filter onto
-  // a tiny offscreen canvas and inspects the resulting pixels: if the edge
-  // pixel isn't measurably softened, real blur rendering isn't happening,
-  // regardless of what the filter property claims.
-  var _canvasFilterSupport = null;
-  function supportsCanvasFilter() {
-    if (_canvasFilterSupport !== null) return _canvasFilterSupport;
-    try {
-      var size = 20;
-      var probeCanvas = document.createElement("canvas");
-      probeCanvas.width = size; probeCanvas.height = size;
-      var probe = probeCanvas.getContext("2d");
-      if (!probe || typeof probe.filter === "undefined") {
-        _canvasFilterSupport = false;
-        return _canvasFilterSupport;
-      }
-      // left half solid black, right half left transparent, then blur it —
-      // a real blur will bleed some black into the right half; a no-op
-      // filter leaves the right half fully transparent (alpha 0).
-      probe.clearRect(0, 0, size, size);
-      probe.fillStyle = "#000000";
-      probe.fillRect(0, 0, size / 2, size);
-      probe.filter = "blur(4px)";
-      probe.drawImage(probeCanvas, 0, 0);
-      var mid = probe.getImageData(size / 2 + 2, Math.floor(size / 2), 1, 1).data;
-      _canvasFilterSupport = mid[3] > 10; // alpha bled past the hard edge
-    } catch (e) {
-      _canvasFilterSupport = false;
-    }
-    return _canvasFilterSupport;
-  }
-
-  // Manual blur fallback for browsers without ctx.filter support: drawing
-  // the source image far smaller and letting the browser's own bitmap
-  // smoothing scale it back up approximates a soft gaussian blur without
-  // depending on the filter API at all, so it works everywhere.
-  function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
-    var factor = clamp(blurRadius / 3, 6, 60);
-    var smallW = Math.max(6, Math.round(destW / factor));
-    var smallH = Math.max(6, Math.round(destH / factor));
-    var small = document.createElement("canvas");
-    small.width = smallW; small.height = smallH;
-    var sctx = small.getContext("2d");
-    sctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, smallW, smallH);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(small, 0, 0, smallW, smallH, destX, destY, destW, destH);
-    ctx.restore();
-  }
-
-  function drawBlurredPhotoBackground(ctx, photoImg) {
-    var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, W, H);
-    var pad = 80;
-    var blurRadius = 42;
-    ctx.save();
-    if (supportsCanvasFilter()) {
-      try {
-        ctx.filter = "blur(" + blurRadius + "px) saturate(1.06) brightness(0.94)";
-        ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
-      } catch (err) {
-        drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
-      }
-    } else {
-      drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
-    }
-    ctx.restore();
-
-    var vg = ctx.createLinearGradient(0, 0, 0, H);
-    vg.addColorStop(0, "rgba(18,15,12,0.22)");
-    vg.addColorStop(0.5, "rgba(18,15,12,0.12)");
-    vg.addColorStop(1, "rgba(18,15,12,0.34)");
-    ctx.fillStyle = vg;
-    ctx.fillRect(0, 0, W, H);
-  }
-
   function drawBackground(ctx, bgColorDef, bgMode, photoImg) {
     ctx.clearRect(0, 0, W, H);
-    if (bgMode === "blur" && photoImg) {
-      drawBlurredPhotoBackground(ctx, photoImg);
-    } else {
-      drawColorBackground(ctx, bgColorDef);
-    }
+    drawColorBackground(ctx, bgColorDef);
   }
 
   // ---------------------------------------------------------------------
@@ -1153,7 +1066,7 @@ ctx.fill();
   function render() {
     renderScene(ctxStage, state.phase, state);
     specCamera.textContent = CAMERA_COLORS[state.cameraColorIndex].label;
-    specBg.textContent = state.bgMode === "blur" ? "PHOTO BLUR" : BG_COLORS[state.bgColorIndex].label;
+    specBg.textContent = BG_COLORS[state.bgColorIndex].label;
     specOrient.textContent = state.orientation === "horizontal" ? "가로" : "세로";
     specScale.textContent = "×" + state.scale;
     phaseLabel.textContent = state.phase >= 1 ? "FRAME — STATIC" : "FRAME — EJECTING";
@@ -1195,17 +1108,6 @@ ctx.fill();
       function () { return state.bgColorIndex; },
       function (i) { state.bgColorIndex = i; }
     );
-  }
-
-  function setBgMode(mode) {
-    state.bgMode = mode;
-    bgModeColorBtn.classList.toggle("is-active", mode === "color");
-    bgModeBlurBtn.classList.toggle("is-active", mode === "blur");
-    bgColorBlock.style.display = mode === "blur" ? "none" : "";
-    bgNote.textContent = mode === "blur"
-      ? "업로드한 사진을 흐리게 처리해 배경으로 사용해요. 사진이 없으면 컬러로 표시됩니다."
-      : "배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.";
-    render();
   }
 
   function setOrientation(orientation) {
@@ -1264,8 +1166,6 @@ ctx.fill();
     });
   }
 
-  bgModeColorBtn.addEventListener("click", function () { setBgMode("color"); });
-  bgModeBlurBtn.addEventListener("click", function () { setBgMode("blur"); });
 
   orientVerticalBtn.addEventListener("click", function () { setOrientation("vertical"); });
   orientHorizontalBtn.addEventListener("click", function () { setOrientation("horizontal"); });
@@ -1327,10 +1227,19 @@ ctx.fill();
     var a = document.createElement("a");
     a.href = url;
     a.download = filename;
+    a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    // Some mobile browsers (notably iOS Safari) hand the blob URL off to
+    // the OS save flow asynchronously — revoking too soon (or removing
+    // the triggering <a> too soon) can interrupt that hand-off partway
+    // through and produce a truncated/corrupted saved file, especially
+    // for larger GIF/video blobs. Keeping the link in the DOM and
+    // revoking after a longer delay gives that flow time to finish.
+    setTimeout(function () {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 10000);
   }
 
   downloadPngBtn.addEventListener("click", function () {
@@ -1686,6 +1595,54 @@ ctx.fill();
     render();
   }
 
+  // Downscales a source image once into an offscreen canvas capped to
+  // maxDim on its longer side, and caches the result on the image object
+  // itself (keyed by maxDim) so repeated calls with the same target size
+  // are free. Exists because GIF/video export redraws every photo on
+  // every single animation frame (dozens of times) — repeatedly asking
+  // ctx.drawImage to downsample a full-resolution phone photo (often
+  // 3000-4000px on a side) that many times in a row is what was causing
+  // the color/pixel corruption reported on mobile: some mobile WebKit/
+  // Chrome builds show tiling or color-channel glitches when the same
+  // oversized source bitmap is downsampled by the GPU compositor over and
+  // over in a tight loop. Pre-shrinking once to roughly export resolution
+  // means every animation frame after that only ever downsamples a small,
+  // already-appropriately-sized bitmap, which is both far more stable and
+  // much faster.
+  function getDownscaledPhoto(img, maxDim) {
+    if (!img) return img;
+    var srcW = img.naturalWidth || img.width;
+    var srcH = img.naturalHeight || img.height;
+    if (!srcW || !srcH) return img;
+    var longSide = Math.max(srcW, srcH);
+    if (longSide <= maxDim) return img;
+    img.__downscaleCache = img.__downscaleCache || {};
+    var cached = img.__downscaleCache[maxDim];
+    if (cached) return cached;
+    var ratio = maxDim / longSide;
+    var dw = Math.max(1, Math.round(srcW * ratio));
+    var dh = Math.max(1, Math.round(srcH * ratio));
+    var c = document.createElement("canvas");
+    c.width = dw; c.height = dh;
+    var cctx = c.getContext("2d");
+    cctx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in cctx) cctx.imageSmoothingQuality = "high";
+    cctx.drawImage(img, 0, 0, srcW, srcH, 0, 0, dw, dh);
+    img.__downscaleCache[maxDim] = c;
+    return c;
+  }
+
+  // Builds a lightweight state clone whose photoImg/2/3 point at
+  // pre-downscaled versions of the originals, for use as the render
+  // source throughout a GIF/video export loop.
+  function withDownscaledPhotos(st, maxDim) {
+    return Object.assign({}, st, {
+      photoImg: getDownscaledPhoto(st.photoImg, maxDim),
+      photoImg2: getDownscaledPhoto(st.photoImg2, maxDim),
+      photoImg3: getDownscaledPhoto(st.photoImg3, maxDim)
+    });
+  }
+
   downloadGifBtn.addEventListener("click", function () {
     downloadGifBtn.disabled = true;
     downloadPngBtn.disabled = true;
@@ -1710,6 +1667,12 @@ ctx.fill();
         var octx = off.getContext("2d");
         octx.scale(gifScale, gifScale);
 
+        // Pre-downscale source photos once (capped a bit above the export
+        // canvas's own resolution) instead of letting every animation
+        // frame re-downsample the full-resolution originals — see
+        // getDownscaledPhoto for why this matters on mobile.
+        var exportState = withDownscaledPhotos(state, Math.round(Math.max(gw, gh) * 1.2));
+
         // more photos in the stack means more frames overall, so trim the
         // per-segment step count a bit past 1 photo to keep total frame
         // count (and encode time/file size) reasonable
@@ -1727,7 +1690,7 @@ ctx.fill();
 
         var rawFrames = [];
         phases.forEach(function (ph) {
-          renderScene(octx, ph, state);
+          renderScene(octx, ph, exportState);
           rawFrames.push(octx.getImageData(0, 0, gw, gh));
         });
 
@@ -1826,7 +1789,10 @@ ctx.fill();
         off.width = vw; off.height = vh;
         var octx = off.getContext("2d");
         octx.scale(vScale, vScale);
-        renderScene(octx, 0, state);
+        // See getDownscaledPhoto: avoids re-downsampling full-resolution
+        // source photos on every recorded frame.
+        var videoExportState = withDownscaledPhotos(state, Math.round(Math.max(vw, vh) * 1.2));
+        renderScene(octx, 0, videoExportState);
 
         var fps = 30;
         var stream, track = null, manualFrames = false;
@@ -1905,7 +1871,7 @@ ctx.fill();
         function tick(now) {
           if (nextFrameAt === null) nextFrameAt = now;
           if (now >= nextFrameAt) {
-            renderScene(octx, frameTs[frameIdx], state);
+            renderScene(octx, frameTs[frameIdx], videoExportState);
             if (manualFrames) track.requestFrame();
             frameIdx++;
             nextFrameAt += frameIntervalMs;
@@ -1916,7 +1882,7 @@ ctx.fill();
           if (frameIdx < frameTs.length) {
             requestAnimationFrame(tick);
           } else {
-            renderScene(octx, 1, state);
+            renderScene(octx, 1, videoExportState);
             if (manualFrames) track.requestFrame();
             setTimeout(function () { recorder.stop(); }, 60);
           }

@@ -168,13 +168,18 @@
   // composition). W is always 1400; H is 800 for horizontal or 1400
   // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
-  // Small fixed top/bottom margin for vertical layout — replaces the old
-  // approach of centering the content in a much taller square canvas,
-  // which produced ~250px of empty space on each side. Kept just large
-  // enough that the camera's own top hardware nubs/shutter-shadow and
-  // the card's drop-shadow have room to render without being clipped by
-  // the canvas edge.
-  var VERTICAL_MARGIN = 40;
+  // How far above the camera's top edge (L.bodyY) the vertical eject
+  // animation's start position sits. Safe to set above 0 only because
+  // drawPhotoCard hard-clips the card to L.bodyY and below on every
+  // frame — this constant only affects how much eject motion is spent
+  // before the card is visible, never what actually renders/exports.
+  var VERTICAL_START_LIFT = 70;
+
+  // Fixed top/bottom margin for vertical layout. Raised 40 -> 90 for
+  // noticeably more breathing room around the camera+card group (the
+  // square canvas side length in applyOrientationDims grows with this,
+  // so margins scale directly with this one constant).
+  var VERTICAL_MARGIN = 90;
 
   var CARD_DIMS = {
     // vertical card is narrower than the (now bigger) camera body so the
@@ -280,17 +285,19 @@
   // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
-    // Start position moved up to just L.bodyY (flush with the camera's
-    // top edge) instead of L.bodyY + CARD_SHADOW_TOP_INSET. This used to
-    // need that extra inset so the card's own drop-shadow spread
-    // (~22px) wouldn't bleed out above the camera's top edge at the
-    // start of the eject — but drawPhotoCard now hard-clips the card
-    // (fill and shadow both) to L.bodyY and below, so nothing can render
-    // above the camera regardless of how high the card starts. That
-    // clip is what actually prevents the leak now; this position just
-    // controls how much of the card peeks out from under the camera at
-    // the very start of the animation.
-    var startY = Math.max(bodyBottom - cardH + 56, L.bodyY);
+    // Start position is L.bodyY - VERTICAL_START_LIFT (above the
+    // camera's own top edge) rather than flush with it or centered on
+    // card height. This relies entirely on drawPhotoCard's hard clip at
+    // L.bodyY (added alongside this): whatever part of the card sits
+    // above L.bodyY is clipped away every frame, in both preview and
+    // every export, so lifting this start position can never actually
+    // show or save anything above the camera — it only changes how much
+    // of the eject motion happens before the card first peeks out from
+    // under the camera body. (Previously this used
+    // max(bodyBottom - cardH + 56, ...), but that term doesn't scale
+    // with the vertical margin and silently overrode the lift once the
+    // margin grew — the lift is now applied directly.)
+    var startY = L.bodyY - VERTICAL_START_LIFT;
     var endY = bodyBottom;
     return lerp(startY, endY, e);
   }
@@ -301,11 +308,14 @@
   function drawColorBackground(ctx, colorDef) {
     var isDark = isDarkColor(colorDef.body);
     // light backgrounds are pre-lightened before building the gradient;
-    // already-dark colors (charcoal/ink/slate/…) are left exactly as-is
-    var base = isDark ? colorDef.body : shade(colorDef.body, 38);
-    var edge = isDark ? shade(colorDef.body, -35) : shade(base, -6);
+    // already-dark colors (charcoal/ink/slate/…) are left exactly as-is.
+    // Raised 38 -> 58: the previous value still read as fairly saturated
+    // on lighter swatches; this pushes them noticeably closer to a pale
+    // pastel while dark swatches are untouched.
+    var base = isDark ? colorDef.body : shade(colorDef.body, 58);
+    var edge = isDark ? shade(colorDef.body, -35) : shade(base, -4);
     var g = ctx.createRadialGradient(W * 0.32, H * 0.28, 60, W * 0.5, H * 0.55, W * 0.8);
-    g.addColorStop(0, isDark ? shade(colorDef.body, 12) : shade(base, 20));
+    g.addColorStop(0, isDark ? shade(colorDef.body, 12) : shade(base, 14));
     g.addColorStop(0.55, isDark ? colorDef.body : base);
     g.addColorStop(1, edge);
     ctx.fillStyle = g;

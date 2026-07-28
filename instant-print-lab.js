@@ -928,10 +928,16 @@ ctx.fill();
   }
 
 
-  function stackOffsetFor(i) {
+  function stackOffsetFor(i, orientation) {
     if (i === 0) return { x: 0, y: 0, rot: 0 };
     var dir = i % 2 === 1 ? 1 : -1;
-    return { x: dir * (10 + i * 4), y: i * 8, rot: dir * (3 + i * 1.5) };
+    var y = i * 8;
+    // Horizontal orientation only: pull the 3rd stacked photo (i === 2)
+    // further up than the shared y*8 formula would, per request — 1st
+    // and 2nd photos, and every offset in vertical orientation, are
+    // untouched.
+    if (orientation === "horizontal" && i === 2) y = i * 8 - 14;
+    return { x: dir * (10 + i * 4), y: y, rot: dir * (3 + i * 1.5) };
   }
 
   
@@ -963,7 +969,7 @@ ctx.fill();
     for (var i = 0; i <= pos.idx; i++) {
       var e = (i < pos.idx) ? 1 : pos.localE;
       drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
-        serialForIndex(st.serialText, i), L, stackOffsetFor(i));
+        serialForIndex(st.serialText, i), L, stackOffsetFor(i, st.orientation));
     }
     drawCamera(ctx, cameraColorDef, L);
   }

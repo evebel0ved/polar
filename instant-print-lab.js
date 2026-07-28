@@ -1797,7 +1797,7 @@ var animMs = state.gifSeconds * photoCount * 1000;
         }
         requestAnimationFrame(tick);
       } catch (errStart) {
-        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. GIF 저장을 이용해 주세요.";
+        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요.";
         resetVideoButtons();
       }
     });

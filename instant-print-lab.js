@@ -929,11 +929,11 @@ ctx.fill();
       ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, pX, pY, pW, pH);
     } else {
       var pg = ctx.createLinearGradient(pX, pY, pX + pW, pY + pH);
-      pg.addColorStop(0, "#eceae4");
-      pg.addColorStop(1, "#dedbd3");
+      pg.addColorStop(0, "#f4f4f5");
+      pg.addColorStop(1, "#e6e6e8");
       ctx.fillStyle = pg;
       ctx.fillRect(pX, pY, pW, pH);
-      ctx.strokeStyle = "rgba(201,198,188,0.15)";
+      ctx.strokeStyle = "rgba(206,206,209,0.12)";
       ctx.lineWidth = 1;
       for (var i = -pH; i < pW; i += 26) {
         ctx.beginPath();

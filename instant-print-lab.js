@@ -1149,11 +1149,18 @@ var duration = state.gifSeconds * photoCount * 1000;
   // Mobile browsers (iOS Safari/Chrome, many Android in-app/webview
   // browsers) don't reliably honor `<a download>` on blob: URLs — instead
   // of saving the file they just navigate to/preview the blob, so nothing
-  // ever reaches Photos/Downloads. Where the Web Share API can share a
-  // File, that's the reliable path there, since it hands off to the
-  // native "Save Image"/"Save to Files" sheet. If sharing isn't available,
-  // we fall back to opening the image in a new tab so the user can
-  // long-press → Save Image.
+  // ever reaches Photos/Downloads.
+  //
+  // We always pre-open a blank tab synchronously inside the click handler
+  // (see downloadPngBtn below) and just navigate it here once the blob is
+  // ready. That tab is the reliable fallback on both iOS and Android. If
+  // Web Share (with files) is available we try that FIRST since it opens
+  // the native "Save Image" sheet directly — but critically we still keep
+  // the pre-opened tab as the fallback destination if sharing fails,
+  // rather than trying to open a *new* window from inside the async
+  // share-rejection handler (that second window.open() call happens
+  // outside the original click gesture and gets silently blocked on iOS,
+  // which is what was showing up as a save error).
   function downloadBlob(blob, filename, existingWin) {
     var mobile = isIOS() || isAndroid();
 
@@ -1161,19 +1168,23 @@ var duration = state.gifSeconds * photoCount * 1000;
       try {
         var file = new File([blob], filename, { type: blob.type || "image/png" });
         if (navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file] }).catch(function () {
-            openBlobInNewTab(blob, filename, existingWin);
+          navigator.share({ files: [file] }).then(function () {
+            if (existingWin) { try { existingWin.close(); } catch (e) {} }
+          }).catch(function () {
+            // share sheet cancelled/failed — fall back to the tab we
+            // already opened synchronously during the click, never open
+            // a fresh window here (would be blocked on iOS)
+            openBlobInNewTab(blob, existingWin);
           });
-          if (existingWin) { try { existingWin.close(); } catch (e) {} }
           return;
         }
       } catch (shareErr) {
-        // fall through to other strategies below
+        // fall through to the tab fallback below
       }
     }
 
     if (mobile) {
-      openBlobInNewTab(blob, filename, existingWin);
+      openBlobInNewTab(blob, existingWin);
       return;
     }
 
@@ -1192,24 +1203,29 @@ var duration = state.gifSeconds * photoCount * 1000;
     }, 10000);
   }
 
-  // Opens the file in a new tab as a fallback save path for mobile
-  // browsers that won't honor `<a download>` on blob URLs. iOS Safari's
-  // popup blocker kills window.open() calls made outside a direct user
-  // gesture (e.g. after an async toBlob/setTimeout), so callers open a
-  // blank tab synchronously inside the click handler and pass it in here
-  // once the blob is ready, instead of calling window.open() at this
-  // point (which would already be too late on iOS).
-  function openBlobInNewTab(blob, filename, existingWin) {
+  // Navigates an already-open tab to the blob so the user can long-press
+  // → Save Image. The tab MUST have been opened synchronously inside the
+  // original click handler (see downloadPngBtn) — opening one here, after
+  // an async render/toBlob/share step, gets blocked by iOS Safari's
+  // popup blocker.
+  function openBlobInNewTab(blob, existingWin) {
     var url = URL.createObjectURL(blob);
-    var win = existingWin || window.open("", "_blank");
-    if (win) {
-      win.location.href = url;
+    if (existingWin && !existingWin.closed) {
+      existingWin.location.href = url;
     } else {
-      // popup blocked and no pre-opened tab available — last resort
+      // No usable pre-opened tab (popup was blocked, or Share API path
+      // never received one) — last resort, navigate this tab directly.
       window.location.href = url;
     }
     setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
   }
+
+  // Many Android WebViews (KakaoTalk/Instagram in-app browsers especially)
+  // silently fail to rasterize very large canvases — toBlob() returns a
+  // "successful" but blank/black image instead of throwing an error. This
+  // caps the exported pixel count to a size those engines can reliably
+  // handle, only on mobile — desktop keeps full requested resolution.
+  var MOBILE_MAX_EXPORT_PIXELS = 16 * 1000 * 1000; // ~16MP safety ceiling
 
   downloadPngBtn.addEventListener("click", function () {
     downloadPngBtn.disabled = true;
@@ -1217,36 +1233,62 @@ var duration = state.gifSeconds * photoCount * 1000;
 
     // On iOS Safari, window.open() only succeeds when called synchronously
     // inside the click handler — any later call (e.g. after the render's
-    // setTimeout/toBlob) gets treated as a popup and blocked. So on
-    // mobile we open a blank tab right now, and just navigate it once the
-    // PNG blob is ready.
+    // setTimeout/toBlob, or from inside a Promise rejection handler) is
+    // treated as a popup and silently blocked. So on mobile we always open
+    // a blank tab right now (even if we intend to try Web Share first),
+    // and just navigate it if sharing isn't available or fails.
     var mobile = isIOS() || isAndroid();
     var preOpenedWin = null;
-    if (mobile && !(navigator.canShare && window.File)) {
+    if (mobile) {
       preOpenedWin = window.open("", "_blank");
     }
 
     setTimeout(function () {
       var scale = state.scale;
+      var pxW = W * scale, pxH = H * scale;
+
+      if (mobile) {
+        var totalPx = pxW * pxH;
+        if (totalPx > MOBILE_MAX_EXPORT_PIXELS) {
+          var shrink = Math.sqrt(MOBILE_MAX_EXPORT_PIXELS / totalPx);
+          scale = Math.max(1, Math.floor(scale * shrink));
+          pxW = W * scale; pxH = H * scale;
+        }
+      }
+
       var off = document.createElement("canvas");
-      off.width = W * scale;
-      off.height = H * scale;
+      off.width = pxW;
+      off.height = pxH;
       var octx = off.getContext("2d");
       octx.scale(scale, scale);
       // PNG only ever shows the first photo — the 2nd/3rd stack is a
       // GIF/video-only feature
       var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
       renderScene(octx, 1, pngState);
+
+      // Guard against the silent-blank-canvas failure mode: sample a few
+      // pixels and bail out with a visible error (instead of "succeeding"
+      // with an all-black image) if the draw clearly didn't happen.
+      var probe = octx.getImageData(0, 0, Math.min(4, off.width), Math.min(4, off.height)).data;
+      var allZero = true;
+      for (var pi = 0; pi < probe.length; pi++) { if (probe[pi] !== 0) { allZero = false; break; } }
+      if (allZero) {
+        statusText.textContent = "이 브라우저에서는 고해상도 PNG를 만들 수 없어요. 화질(×배수)을 낮춰서 다시 시도해 주세요.";
+        if (preOpenedWin) { try { preOpenedWin.close(); } catch (e) {} }
+        downloadPngBtn.disabled = false;
+        return;
+      }
+
       off.toBlob(function (blob) {
         if (!blob) {
-          statusText.textContent = "PNG 저장 중 오류가 발생했어요.";
+          statusText.textContent = "PNG 저장 중 오류가 발생했어요. 화질(×배수)을 낮춰서 다시 시도해 주세요.";
           if (preOpenedWin) { try { preOpenedWin.close(); } catch (e) {} }
           downloadPngBtn.disabled = false;
           return;
         }
         downloadBlob(blob, "instant-print-card.png", preOpenedWin);
         statusText.textContent = mobile
-          ? "PNG 준비 완료 — 새 탭에서 이미지를 길게 눌러 저장하세요."
+          ? "PNG 준비 완료 — 새 탭/공유창에서 이미지를 저장하세요."
           : "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
         downloadPngBtn.disabled = false;
       }, "image/png");

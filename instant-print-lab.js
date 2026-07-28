@@ -560,7 +560,7 @@
     ctx.fillStyle = color;
     ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(0,0,0,0.28)";
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
     ctx.stroke();
     ctx.restore();
   }

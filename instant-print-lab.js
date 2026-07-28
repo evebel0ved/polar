@@ -1730,19 +1730,17 @@ var offset =
                 // guards against the automatic sampler needing a bit
                 // longer to catch up on slower devices.
                 var elapsed = performance.now() - startedAt;
-                var minRecordMs = animFrameCount * frameIntervalMs + holdFrameCount * frameIntervalMs;
-                var extraWait = Math.max(1200, minRecordMs - elapsed + 1200);
-                setTimeout(function () {
-  if (recorder.state !== "inactive") {
-    try {
-      recorder.requestData();   // 마지막 청크 강제 생성
-    } catch (e) {}
+var minRecordMs = animFrameCount * frameIntervalMs + holdFrameCount * frameIntervalMs;
 
-    setTimeout(function () {
-      if (recorder.state !== "inactive") {
-        recorder.stop();
-      }
-    }, 1000); // 마지막 프레임이 인코더에 들어갈 시간 확보
+var endPadding = isAndroid() ? 2500 : 300;
+var extraWait = Math.max(
+  endPadding,
+  minRecordMs - elapsed + endPadding
+);
+
+setTimeout(function () {
+  if (recorder.state !== "inactive") {
+    recorder.stop();
   }
 }, extraWait);
                 

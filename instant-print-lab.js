@@ -855,9 +855,9 @@ ctx.fill();
 
     if (!photoImg) {
       ctx.fillStyle = "#8b887f";
-      ctx.font = "500 15px 'IBM Plex Sans KR', sans-serif";
+      ctx.font = "500 17px 'IBM Plex Sans KR', sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("사진을 업로드하세요", pX + pW / 2, pY + pH / 2 + 5);
+      ctx.fillText("Upload your photo", pX + pW / 2, pY + pH / 2 + 5);
     }
 
     function fitFontSize(ctx, text, family, maxSize, maxWidth) {

@@ -1103,7 +1103,7 @@ ctx.fill();
       if (rafId) cancelAnimationFrame(rafId);
       state.phase = 1;
       render();
-      playPreviewBtn.textContent = "▶ 애니메이션 미리보기";
+      playPreviewBtn.textContent = "▶ MOTION PREVIEW";
       return;
     }
     state.playing = true;

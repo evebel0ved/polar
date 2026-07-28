@@ -296,7 +296,7 @@ label.check input{accent-color:var(--accent);}
       <span>BG <b id="specBg">PAPER</b></span>
       <span>CUT <b id="specOrient">가로</b></span>
       <span>OUT <b id="specScale">×6</b></span>
-      <span>FMT <b>PNG / GIF / WEBM</b></span>
+      <span>FMT <b>PNG / WEBM</b></span>
     </div>
   </header>
 
@@ -351,14 +351,8 @@ label.check input{accent-color:var(--accent);}
 
     <div class="field-group">
       <span class="eyebrow">04 · 배경</span>
-      <div class="toggle-row">
-        <button type="button" class="toggle-btn is-active" id="bgModeColor">컬러</button>
-        <button type="button" class="toggle-btn" id="bgModeBlur">사진 블러</button>
-      </div>
-      <div class="sub-block" id="bgColorBlock">
-        <div class="swatch-grid" id="bgSwatchGrid"></div>
-      </div>
-      <p class="upload-note" id="bgNote">배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.</p>
+      <div class="swatch-grid" id="bgSwatchGrid"></div>
+      <p class="upload-note">배경 컬러를 카메라 컬러와 별도로 고를 수 있어요.</p>
     </div>
 
     <div class="field-group">
@@ -372,14 +366,14 @@ label.check input{accent-color:var(--accent);}
 
     <div class="field-group">
       <span class="eyebrow">06 · 출력 문구</span>
-      <input type="text" class="text-input" id="captionInput" maxlength="18" value="INSTANT" placeholder="예: INSTANT">
-      <p class="upload-note">폴라로이드 흰 여백에 들어가는 문구를 자유롭게 바꿀 수 있어요.</p>
+      <input type="text" class="text-input" id="captionInput" maxlength="40" value="INSTANT" placeholder="예: INSTANT (비워두면 공백으로 출력)">
+      <p class="upload-note">폴라로이드 흰 여백에 들어가는 문구를 자유롭게 바꿀 수 있어요. 비워두면 문구 없이 출력돼요.</p>
     </div>
 
     <div class="field-group">
       <span class="eyebrow">07 · 시리얼 넘버</span>
-      <input type="text" class="text-input" id="serialInput" maxlength="14" value="N° 01" placeholder="예: N° 01">
-      <p class="upload-note">여백에 작게 들어가는 "N° 01" 문구를 자유롭게 바꿀 수 있어요. 숫자로 끝나면 추가 사진마다 번호가 자동으로 하나씩 올라가요.</p>
+      <input type="text" class="text-input" id="serialInput" maxlength="14" value="N° 01" placeholder="예: N° 01 (비워두면 공백으로 출력)">
+      <p class="upload-note">여백에 작게 들어가는 "N° 01" 문구를 자유롭게 바꿀 수 있어요. 숫자로 끝나면 추가 사진마다 번호가 자동으로 하나씩 올라가요. 비워두면 문구 없이 출력돼요.</p>
     </div>
 
     <div class="field-group">
@@ -397,7 +391,6 @@ label.check input{accent-color:var(--accent);}
         <input id="gifRange" type="range" min="0.8" max="3" step="0.1" value="1.4">
         <span class="val" id="gifVal">1.4s</span>
       </div>
-      <label class="check"><input id="gifLoop" type="checkbox" checked> 반복 재생(loop)</label>
     </div>
 
     <hr class="divider">
@@ -405,10 +398,9 @@ label.check input{accent-color:var(--accent);}
     <div class="field-group">
       <span class="eyebrow">10 · 저장</span>
       <div class="download-grid">
-        <button id="downloadPng" type="button" class="block">PNG 저장</button>
-        <button id="downloadGif" type="button" class="primary block">GIF 저장</button>
+        <button id="downloadPng" type="button" class="primary block">PNG 저장</button>
       </div>
-      <p class="upload-note">GIF·동영상 저장은 인터넷 연결 없이 로컬에서 인코딩됩니다. 이미지가 클수록, 사진 장수가 많을수록 시간이 더 걸릴 수 있어요.</p>
+      <p class="upload-note">동영상 저장은 인터넷 연결 없이 로컬에서 인코딩됩니다. 이미지가 클수록, 사진 장수가 많을수록 시간이 더 걸릴 수 있어요.</p>
     </div>
   </aside>
 </div>

@@ -939,8 +939,8 @@ ctx.fill();
       pg.addColorStop(1, "#dedbd3");
       ctx.fillStyle = pg;
       ctx.fillRect(pX, pY, pW, pH);
-      ctx.strokeStyle = "#c9c6bc";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(201,198,188,0.15)";
+      ctx.lineWidth = 1;
       for (var i = -pH; i < pW; i += 26) {
         ctx.beginPath();
         ctx.moveTo(pX + i, pY + pH);

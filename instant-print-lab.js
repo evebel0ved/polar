@@ -154,7 +154,7 @@
   // Scene layout
   // ---------------------------------------------------------------------
 
-  var VERTICAL_MARGIN = 240;
+  var VERTICAL_MARGIN = 250;
 
   var CARD_DIMS = {
    
@@ -1205,23 +1205,38 @@ var duration = state.gifSeconds * photoCount * 1000;
   downloadPngBtn.addEventListener("click", function () {
     downloadPngBtn.disabled = true;
     statusText.textContent = "PNG 렌더링 중… (×" + state.scale + ")";
-    setTimeout(function () {
-      var scale = state.scale;
-      var off = document.createElement("canvas");
-      off.width = W * scale;
-      off.height = H * scale;
-      var octx = off.getContext("2d");
-      octx.scale(scale, scale);
-      // PNG only ever shows the first photo — the 2nd/3rd stack is a
-      // GIF/video-only feature
-      var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
-      renderScene(octx, 1, pngState);
-      off.toBlob(function (blob) {
-        downloadBlob(blob, "instant-print-card.png");
-        statusText.textContent = "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
-        downloadPngBtn.disabled = false;
-      }, "image/png");
-    }, 30);
+    // Wait for web fonts (Space Grotesk, IBM Plex Mono) to finish
+    // loading before rendering the export snapshot. The offscreen
+    // export canvas is never attached to the DOM and is only rendered
+    // once, so if a caption font hasn't finished loading at that exact
+    // moment, the browser silently falls back to sans-serif for that
+    // single frame — and plain-text symbols like ♥ that Space Grotesk
+    // has its own glyph for can render via a *different* fallback font
+    // that maps ♥ to a colored emoji glyph instead of following
+    // fillStyle. The live preview never showed this because it keeps
+    // re-rendering every frame, so it self-corrects the instant fonts
+    // finish loading — a one-shot export doesn't get that second
+    // chance.
+    var fontsReady = (document.fonts && document.fonts.ready) || Promise.resolve();
+    fontsReady.then(function () {
+      setTimeout(function () {
+        var scale = state.scale;
+        var off = document.createElement("canvas");
+        off.width = W * scale;
+        off.height = H * scale;
+        var octx = off.getContext("2d");
+        octx.scale(scale, scale);
+        // PNG only ever shows the first photo — the 2nd/3rd stack is a
+        // GIF/video-only feature
+        var pngState = Object.assign({}, state, { photoImg2: null, photoImg3: null });
+        renderScene(octx, 1, pngState);
+        off.toBlob(function (blob) {
+          downloadBlob(blob, "instant-print-card.png");
+          statusText.textContent = "PNG 저장 완료 (" + off.width + "×" + off.height + ")";
+          downloadPngBtn.disabled = false;
+        }, "image/png");
+      }, 30);
+    });
   });
 
   // ---------------------------------------------------------------------
@@ -1618,6 +1633,22 @@ var offset =
       playPreviewBtn.disabled = true;
       statusText.textContent = "동영상 녹화 준비 중…";
 
+      // Wait for web fonts (Space Grotesk, IBM Plex Mono) to finish
+      // loading before the first frame is rendered. The offscreen export
+      // canvas is never attached to the DOM, and the very first
+      // renderScene call below seeds the recorded stream — if a caption
+      // font hasn't finished loading at that moment, the browser
+      // silently falls back to sans-serif, and plain-text symbols like
+      // ♥ that Space Grotesk has its own glyph for can render via a
+      // *different* fallback font that maps ♥ to a colored emoji glyph
+      // instead of following fillStyle. The live preview never showed
+      // this because it keeps re-rendering every frame and self-corrects
+      // the instant fonts finish loading — a recorded export doesn't get
+      // that second chance for frames already captured.
+      var fontsReady = (document.fonts && document.fonts.ready) || Promise.resolve();
+      fontsReady.then(startRecording);
+
+      function startRecording() {
       try {
         var vScale = 1.6;
         var vw = Math.round(W * vScale), vh = Math.round(H * vScale);
@@ -1739,6 +1770,7 @@ var animMs = state.gifSeconds * photoCount * 1000;
       } catch (errStart) {
         statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. GIF 저장을 이용해 주세요.";
         resetVideoButtons();
+      }
       }
     });
   }

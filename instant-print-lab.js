@@ -93,6 +93,14 @@
   function lerp(a, b, t) { return a + (b - a) * t; }
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
+  // Used to cap video export resolution on Android — see the video
+  // export block below for why (weaker/inconsistent hardware H.264
+  // encoders on some Android devices drop frames or crash the GPU
+  // process at larger canvas sizes; iOS/desktop don't need the cap).
+  function isAndroid() {
+    return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
+  }
+
   function hexToRgb(hex) {
     var h = hex.replace("#", "");
     return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
@@ -1563,8 +1571,25 @@ var offset =
       statusText.textContent = "동영상 녹화 준비 중…";
 
       try {
-        var vScale = 1.6;
+        // Android hardware H.264 encoders are inconsistent at larger
+        // frame sizes — some drop frames mid-recording (clip ends up
+        // way shorter than intended) and some crash the GPU process
+        // entirely on lower-memory devices. Capping the export canvas
+        // to a smaller long-side on Android substantially reduces both
+        // failure modes; desktop/iOS keep the original, higher-quality
+        // scale since they don't show this issue.
+        var vScale = isAndroid() ? 1.0 : 1.6;
+        var ANDROID_MAX_LONG_SIDE = 1280;
         var vw = Math.round(W * vScale), vh = Math.round(H * vScale);
+        if (isAndroid()) {
+          var longSide = Math.max(vw, vh);
+          if (longSide > ANDROID_MAX_LONG_SIDE) {
+            var capRatio = ANDROID_MAX_LONG_SIDE / longSide;
+            vScale = vScale * capRatio;
+            vw = Math.round(W * vScale);
+            vh = Math.round(H * vScale);
+          }
+        }
         var off = document.createElement("canvas");
         off.width = vw; off.height = vh;
         var octx = off.getContext("2d");

@@ -338,76 +338,27 @@
   // pixel isn't measurably softened, real blur rendering isn't happening,
   // regardless of what the filter property claims.
   var _canvasFilterSupport = null;
-  function supportsCanvasFilter() {
-    if (_canvasFilterSupport !== null) return _canvasFilterSupport;
-    try {
-      var size = 20;
-      var probeCanvas = document.createElement("canvas");
-      probeCanvas.width = size; probeCanvas.height = size;
-      var probe = probeCanvas.getContext("2d");
-      if (!probe || typeof probe.filter === "undefined") {
-        _canvasFilterSupport = false;
-        return _canvasFilterSupport;
-      }
-      // left half solid black, right half left transparent, then blur it —
-      // a real blur will bleed some black into the right half; a no-op
-      // filter leaves the right half fully transparent (alpha 0).
-      probe.clearRect(0, 0, size, size);
-      probe.fillStyle = "#000000";
-      probe.fillRect(0, 0, size / 2, size);
-      probe.filter = "blur(4px)";
-      probe.drawImage(probeCanvas, 0, 0);
-      var mid = probe.getImageData(size / 2 + 2, Math.floor(size / 2), 1, 1).data;
-      _canvasFilterSupport = mid[3] > 10; // alpha bled past the hard edge
-    } catch (e) {
-      _canvasFilterSupport = false;
-    }
-    return _canvasFilterSupport;
-  }
+  
 
   // Manual blur fallback for browsers without ctx.filter support: drawing
   // the source image far smaller and letting the browser's own bitmap
   // smoothing scale it back up approximates a soft gaussian blur without
   // depending on the filter API at all, so it works everywhere.
-  function drawManualBlur(ctx, img, crop, destX, destY, destW, destH, blurRadius) {
-    var factor = clamp(blurRadius / 3, 6, 60);
-    var smallW = Math.max(6, Math.round(destW / factor));
-    var smallH = Math.max(6, Math.round(destH / factor));
-    var small = document.createElement("canvas");
-    small.width = smallW; small.height = smallH;
-    var sctx = small.getContext("2d");
-    sctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, smallW, smallH);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(small, 0, 0, smallW, smallH, destX, destY, destW, destH);
-    ctx.restore();
-  }
+  
 
-  function drawBlurredPhotoBackground(ctx, photoImg) {
-    var crop = coverRect(photoImg.naturalWidth || photoImg.width, photoImg.naturalHeight || photoImg.height, W, H);
-    var pad = 80;
-    var blurRadius = 42;
-    ctx.save();
-    if (supportsCanvasFilter()) {
-      try {
-        ctx.filter = "blur(" + blurRadius + "px) saturate(1.06) brightness(0.94)";
-        ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, -pad, -pad, W + pad * 2, H + pad * 2);
-      } catch (err) {
-        drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
-      }
-    } else {
-      drawManualBlur(ctx, photoImg, crop, -pad, -pad, W + pad * 2, H + pad * 2, blurRadius);
-    }
-    ctx.restore();
+ function drawBlurredPhotoBackground(ctx, photoImg, w, h) {
+  // 1. 이전 내용을 깨끗하게 지우기
+  ctx.clearRect(0, 0, w, h);
 
-    var vg = ctx.createLinearGradient(0, 0, 0, H);
-    vg.addColorStop(0, "rgba(18,15,12,0.22)");
-    vg.addColorStop(0.5, "rgba(18,15,12,0.12)");
-    vg.addColorStop(1, "rgba(18,15,12,0.34)");
-    ctx.fillStyle = vg;
-    ctx.fillRect(0, 0, W, H);
-  }
+  // 2. 브라우저 내장 필터(GPU 가속)를 사용해 가우시안 블러 적용
+  ctx.filter = 'blur(20px)';
+
+  // 3. 사진을 캔버스 크기에 맞춰 그리기
+  ctx.drawImage(photoImg, 0, 0, w, h);
+
+  // 4. 중요: 필터를 즉시 해제해야 다음 요소(글자 등)가 흐려지지 않음
+  ctx.filter = 'none';
+}
 
   function drawBackground(ctx, bgColorDef, bgMode, photoImg) {
     ctx.clearRect(0, 0, W, H);
@@ -1126,31 +1077,41 @@ ctx.fill();
   }
 
   function renderScene(ctx, phase, st) {
-    var L = getLayout(st.orientation);
-    var cameraColorDef = CAMERA_COLORS[st.cameraColorIndex];
-    var bgColorDef = BG_COLORS[st.bgColorIndex];
-    drawBackground(ctx, bgColorDef, st.bgMode, st.photoImg);
-
-    // 2nd/3rd photos only ever take part here — PNG export always calls
-    // this with a state clone that has photoImg2/3 cleared, so a plain
-    // still export never shows a stack, per spec.
-    var photos = [st.photoImg];
-    if (st.photoImg2) photos.push(st.photoImg2);
-    if (st.photoImg3) photos.push(st.photoImg3);
-    var pos = resolveTimelinePosition(phase, photos.length);
-
-    // cards drawn first (in stacking order), camera drawn on top — the
-    // part of each card still "inside" the body gets covered by the
-    // camera, giving the eject effect
-    for (var i = 0; i <= pos.idx; i++) {
-      var e = (i < pos.idx) ? 1 : pos.localE;
-      drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
-        serialForIndex(st.serialText, i), L, stackOffsetFor(i));
-    }
-    drawCamera(ctx, cameraColorDef, L);
+  var L = getLayout(st.orientation);
+  var cameraColorDef = CAMERA_COLORS[st.cameraColorIndex];
+  var bgColorDef = BG_COLORS[st.bgColorIndex];
+  
+  // 수정: 기존의 복잡한 bgMode 파라미터를 제거하고 
+  // 상황에 맞는 함수를 직접 호출하도록 변경합니다.
+  if (st.bgMode === 'blur') {
+     // 새로 만든 블러 함수 호출 (W, H는 캔버스의 가로/세로 변수)
+     drawBlurredPhotoBackground(ctx, st.photoImg, W, H);
+  } else {
+     // 블러가 아닐 때는 컬러 배경만 그리기
+     drawColorBackground(ctx, bgColorDef);
   }
 
+  // 이후 아래의 카드(사진) 그리기 코드는 그대로 유지하세요
+  var photos = [st.photoImg];
+  if (st.photoImg2) photos.push(st.photoImg2);
+  if (st.photoImg3) photos.push(st.photoImg3);
+  var pos = resolveTimelinePosition(phase, photos.length);
+
+  for (var i = 0; i <= pos.idx; i++) {
+    var e = (i < pos.idx) ? 1 : pos.localE;
+    drawPhotoCard(ctx, e, photos[i], st.orientation, st.captionText,
+      serialForIndex(st.serialText, i), L, stackOffsetFor(i));
+  }
+  drawCamera(ctx, cameraColorDef, L);
+}
+
   function render() {
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // 캔버스 크기 재설정 (필요한 경우)
+    const dpr = window.devicePixelRatio || 1;
+    
     renderScene(ctxStage, state.phase, state);
     specCamera.textContent = CAMERA_COLORS[state.cameraColorIndex].label;
     specBg.textContent = state.bgMode === "blur" ? "PHOTO BLUR" : BG_COLORS[state.bgColorIndex].label;

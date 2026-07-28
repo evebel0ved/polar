@@ -1,4 +1,4 @@
-  (function () {
+(function () {
   "use strict";
 
   // ---------------------------------------------------------------------
@@ -45,7 +45,6 @@
   var state = {
     cameraColorIndex: 0,
     bgColorIndex: 0,
-    bgMode: "color",
     orientation: "vertical", //   "horizontal"
     captionText: "INSTANT",
     serialText: "N° 01",       // customizable frame-number label printed on the card margin
@@ -54,7 +53,6 @@
     photoImg3: null,           // 3rd photo — only used for GIF/video (stacks on top of photo 2)
     scale: 6,
     gifSeconds: 2.4,
-    gifLoop: true,
     phase: 1,
     playing: false
   };
@@ -82,8 +80,6 @@
   var serialInput = document.getElementById("serialInput");
   var cameraSwatchGrid = document.getElementById("cameraSwatchGrid");
   var bgSwatchGrid = document.getElementById("bgSwatchGrid");
-  var bgColorBlock = document.getElementById("bgColorBlock");
-  var bgNote = document.getElementById("bgNote");
   var orientVerticalBtn = document.getElementById("orientVertical");
   var orientHorizontalBtn = document.getElementById("orientHorizontal");
   var captionInput = document.getElementById("captionInput");
@@ -91,10 +87,8 @@
   var scaleVal = document.getElementById("scaleVal");
   var gifRange = document.getElementById("gifRange");
   var gifVal = document.getElementById("gifVal");
-  var gifLoopBox = document.getElementById("gifLoop");
   var playPreviewBtn = document.getElementById("playPreview");
   var downloadPngBtn = document.getElementById("downloadPng");
-  var downloadGifBtn = document.getElementById("downloadGif");
 
   // ---------------------------------------------------------------------
   // Small utilities
@@ -326,7 +320,7 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  function drawBackground(ctx, bgColorDef, bgMode, photoImg) {
+  function drawBackground(ctx, bgColorDef) {
     ctx.clearRect(0, 0, W, H);
     drawColorBackground(ctx, bgColorDef);
   }
@@ -877,8 +871,8 @@ ctx.fill();
     left += stack.x || 0;
     top += stack.y || 0;
 
-    var caption = (captionText || "").trim() || "INSTANT";
-    var serial = (serialText || "").trim() || "N° 01";
+    var caption = captionText || "";
+    var serial = serialText || "";
 
     ctx.save();
     if (orientation === "vertical") {
@@ -962,29 +956,52 @@ ctx.fill();
       ctx.fillText("사진을 업로드하세요", pX + pW / 2, pY + pH / 2 + 5);
     }
 
+    // Shrinks (never grows) the font size, in 1px steps, until `text`
+    // fits within maxWidth at the given ctx.font — so longer captions
+    // (up to the input's 40-char max) degrade gracefully instead of
+    // overflowing the card's margin strip. No-ops for empty text.
+    function fitFontSize(ctx, text, family, maxSize, maxWidth) {
+      var size = maxSize;
+      if (!text) return size;
+      ctx.font = size + "px " + family;
+      while (size > 8 && ctx.measureText(text).width > maxWidth) {
+        size -= 1;
+        ctx.font = size + "px " + family;
+      }
+      return size;
+    }
+
     if (dims.side === "right") {
       // vertical margin strip on the right
       var mCenterX = left + dims.w - dims.margin / 2;
+      var serialMaxW = dims.margin - 10;
+      var serialSize = fitFontSize(ctx, serial, "'IBM Plex Mono', monospace", 13, serialMaxW);
       ctx.fillStyle = "#9a968c";
-      ctx.font = "500 13px 'IBM Plex Mono', monospace";
+      ctx.font = "500 " + serialSize + "px 'IBM Plex Mono', monospace";
       ctx.textAlign = "center";
       ctx.fillText(serial, mCenterX, top + 34);
 
+      var captionMaxH = dims.h - 60;
+      var captionSize = fitFontSize(ctx, caption, "'Space Grotesk', sans-serif", 15, captionMaxH);
       ctx.save();
       ctx.translate(mCenterX, top + dims.h - 26);
       ctx.rotate(-Math.PI / 2);
       ctx.textAlign = "left";
-      ctx.font = "600 15px 'Space Grotesk', sans-serif";
+      ctx.font = "600 " + captionSize + "px 'Space Grotesk', sans-serif";
       ctx.fillStyle = "#5b5850";
       ctx.fillText(caption, 0, 0);
       ctx.restore();
     } else {
+      var bottomHalfW = dims.w / 2 - pad - 6;
+      var serialSizeB = fitFontSize(ctx, serial, "'IBM Plex Mono', monospace", 13, bottomHalfW);
       ctx.fillStyle = "#9a968c";
-      ctx.font = "500 13px 'IBM Plex Mono', monospace";
+      ctx.font = "500 " + serialSizeB + "px 'IBM Plex Mono', monospace";
       ctx.textAlign = "left";
       ctx.fillText(serial, left + pad, top + dims.h - dims.margin + 40);
+
+      var captionSizeB = fitFontSize(ctx, caption, "'Space Grotesk', sans-serif", 15, bottomHalfW);
       ctx.textAlign = "right";
-      ctx.font = "600 15px 'Space Grotesk', sans-serif";
+      ctx.font = "600 " + captionSizeB + "px 'Space Grotesk', sans-serif";
       ctx.fillStyle = "#5b5850";
       ctx.fillText(caption, left + dims.w - pad, top + dims.h - dims.margin + 40);
     }
@@ -1027,7 +1044,7 @@ ctx.fill();
   // card auto-increments that trailing number; otherwise every card
   // just repeats the same custom text as-is.
   function serialForIndex(text, i) {
-    var base = (text || "").trim() || "N° 01";
+    var base = text || "";
     if (i === 0) return base;
     var m = /^(.*?)(\d+)(\D*)$/.exec(base);
     if (!m) return base;
@@ -1042,7 +1059,7 @@ ctx.fill();
     var L = getLayout(st.orientation);
     var cameraColorDef = CAMERA_COLORS[st.cameraColorIndex];
     var bgColorDef = BG_COLORS[st.bgColorIndex];
-    drawBackground(ctx, bgColorDef, st.bgMode, st.photoImg);
+    drawBackground(ctx, bgColorDef);
 
     // 2nd/3rd photos only ever take part here — PNG export always calls
     // this with a state clone that has photoImg2/3 cleared, so a plain
@@ -1184,10 +1201,6 @@ ctx.fill();
   gifRange.addEventListener("input", function () {
     state.gifSeconds = parseFloat(gifRange.value);
     gifVal.textContent = state.gifSeconds.toFixed(1) + "s";
-  });
-
-  gifLoopBox.addEventListener("change", function () {
-    state.gifLoop = gifLoopBox.checked;
   });
 
   // preview animation (visible canvas only — not exported)
@@ -1604,15 +1617,6 @@ var offset =
     return out.toUint8Array();
   }
 
-  function resetGifButtons() {
-    downloadGifBtn.disabled = false;
-    downloadPngBtn.disabled = false;
-    playPreviewBtn.disabled = false;
-    if (typeof downloadVideoBtn !== "undefined" && downloadVideoBtn) downloadVideoBtn.disabled = false;
-    state.phase = 1;
-    render();
-  }
-
   // Downscales a source image once into an offscreen canvas capped to
   // maxDim on its longer side, and caches the result on the image object
   // itself (keyed by maxDim) so repeated calls with the same target size
@@ -1661,123 +1665,23 @@ var offset =
     });
   }
 
-  downloadGifBtn.addEventListener("click", function () {
-    downloadGifBtn.disabled = true;
-    downloadPngBtn.disabled = true;
-    playPreviewBtn.disabled = true;
-    if (typeof downloadVideoBtn !== "undefined" && downloadVideoBtn) downloadVideoBtn.disabled = true;
-    statusText.textContent = "GIF 프레임 렌더링 중…";
-
-    setTimeout(function () {
-      try {
-        // Raised from 1.6 to 2.2: on high-density phone screens (2x-3x
-        // device pixel ratio) a 1.6x export (2240x1280) still gets
-        // upscaled by the OS/gallery viewer when opened at normal size,
-        // which blows the fixed 8x8 Bayer dither pattern up into visible
-        // "grain" without the user needing to pinch-zoom. At 2.2x
-        // (3080x1760) each dither cell maps to a smaller fraction of the
-        // screen, so the pattern stays below the eye's resolving power at
-        // normal viewing sizes.
-        var gifScale = 2.2;
-        var gw = Math.round(W * gifScale), gh = Math.round(H * gifScale);
-        var off = document.createElement("canvas");
-        off.width = gw; off.height = gh;
-        var octx = off.getContext("2d");
-        octx.scale(gifScale, gifScale);
-
-        // Pre-downscale source photos once (capped a bit above the export
-        // canvas's own resolution) instead of letting every animation
-        // frame re-downsample the full-resolution originals — see
-        // getDownscaledPhoto for why this matters on mobile.
-        var exportState = withDownscaledPhotos(state, Math.round(Math.max(gw, gh) * 1.2));
-
-        // more photos in the stack means more frames overall, so trim the
-        // per-segment step count a bit past 1 photo to keep total frame
-        // count (and encode time/file size) reasonable
-        var photoCount = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
-        var slideSteps = 16;
-        var holdSteps = 6;
-        var stepsPerSeg = slideSteps + holdSteps;
-        var totalSteps = stepsPerSeg * photoCount;
-        var totalMs = state.gifSeconds * photoCount * 1000;
-        var perFrameMs = totalMs / totalSteps;
-        var phases = [];
-        for (var s = 0; s <= totalSteps; s++) phases.push(s / totalSteps);
-        // brief extra hold on the final resting shot
-        for (var h = 0; h < (photoCount > 1 ? 8 : 6); h++) phases.push(1);
-
-        var rawFrames = [];
-        phases.forEach(function (ph) {
-          renderScene(octx, ph, exportState);
-          rawFrames.push(octx.getImageData(0, 0, gw, gh));
-        });
-
-        statusText.textContent = "GIF 색상 팔레트 계산 중…";
-        setTimeout(function () {
-          try {
-            // palette pooled across every frame — not just the last still
-            // frame — so colors stay consistent through the whole animation
-            var palette = buildPaletteFromFrames(rawFrames.map(function (f) { return f.data; }), 256);
-            var nearest = makeNearestIndexFn(palette);
-
-            statusText.textContent = "GIF 인코딩 중… (" + rawFrames.length + "프레임)";
-            setTimeout(function () {
-              try {
-                var frames = rawFrames.map(function (imgData) {
-                  // ordered (Bayer) dithering: smooths gradient banding
-                  // without the frame-to-frame shimmer error-diffusion
-                  // dithering caused on this animation
-                  return {
-                    // strength lowered again, 9 -> 5, alongside the export
-                    // resolution bump above. 9 still produced a visible
-                    // dot grid on high-density mobile screens at normal
-                    // (non-zoomed) viewing size. 5 is the smallest nudge
-                    // that still meaningfully breaks flat-color/gradient
-                    // banding into the 256-color palette, while staying
-                    // under the threshold of what's visible without
-                    // zooming in.
-                    indices: imageDataToIndicesOrderedDither(imgData.data, gw, gh, nearest, 5),
-                    delay: perFrameMs
-                  };
-                });
-                var bytes = encodeGIF({ width: gw, height: gh, palette: palette, frames: frames, loop: state.gifLoop });
-                var blob = new Blob([bytes], { type: "image/gif" });
-                downloadBlob(blob, "instant-print-card.gif");
-                statusText.textContent = "GIF 저장 완료 (" + gw + "×" + gh + ", " + frames.length + "프레임)";
-              } catch (err3) {
-                statusText.textContent = "GIF 인코딩 중 오류가 발생했어요. 다시 시도해 주세요.";
-              }
-              resetGifButtons();
-            }, 20);
-          } catch (err2) {
-            statusText.textContent = "GIF 색상 계산 중 오류가 발생했어요. 다시 시도해 주세요.";
-            resetGifButtons();
-          }
-        }, 20);
-      } catch (err1) {
-        statusText.textContent = "GIF 렌더링 중 오류가 발생했어요. 다시 시도해 주세요.";
-        resetGifButtons();
-      }
-    }, 30);
-  });
-
   // ---------------------------------------------------------------------
   // Video (WebM) export — uses the browser's own encoder via
   // canvas.captureStream() + MediaRecorder, so quality is far higher (and
-  // encoding far faster/lighter) than the hand-rolled GIF path above.
+  // encoding far faster/lighter) than a hand-rolled GIF encoder would be.
   // Added as a companion "동영상으로 저장" button placed right after the
-  // GIF button, since no video export existed before.
+  // PNG button.
   // ---------------------------------------------------------------------
   function createVideoButton() {
-    if (!downloadGifBtn || !downloadGifBtn.parentNode) return null;
+    if (!downloadPngBtn || !downloadPngBtn.parentNode) return null;
     if (typeof MediaRecorder === "undefined" ||
         !HTMLCanvasElement.prototype.captureStream) return null;
     var btn = document.createElement("button");
     btn.type = "button";
     btn.id = "downloadVideo";
-    btn.className = downloadGifBtn.className;
+    btn.className = "block";
     btn.textContent = "동영상으로 저장";
-    downloadGifBtn.parentNode.insertBefore(btn, downloadGifBtn.nextSibling);
+    downloadPngBtn.parentNode.insertBefore(btn, downloadPngBtn.nextSibling);
     return btn;
   }
 
@@ -1787,7 +1691,6 @@ var offset =
     downloadVideoBtn.addEventListener("click", function () {
       function resetVideoButtons() {
         downloadVideoBtn.disabled = false;
-        downloadGifBtn.disabled = false;
         downloadPngBtn.disabled = false;
         playPreviewBtn.disabled = false;
         state.phase = 1;
@@ -1795,7 +1698,6 @@ var offset =
       }
 
       downloadVideoBtn.disabled = true;
-      downloadGifBtn.disabled = true;
       downloadPngBtn.disabled = true;
       playPreviewBtn.disabled = true;
       statusText.textContent = "동영상 녹화 준비 중…";

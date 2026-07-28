@@ -1273,7 +1273,7 @@ ctx.fill();
   // frames that made saved GIFs look broken.
   function buildPaletteFromFrames(dataArrays, maxColors) {
     var samples = [];
-    var strideEach = 4;
+    var strideEach = 8;
     dataArrays.forEach(function (data) {
       for (var i = 0; i < data.length; i += strideEach) {
         samples.push([data[i], data[i + 1], data[i + 2]]);

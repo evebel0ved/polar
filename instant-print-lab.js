@@ -160,12 +160,12 @@
   // composition). W is always 1400; H is 800 for horizontal or 1400
   // (square) for vertical — see applyOrientationDims().
   // ---------------------------------------------------------------------
-  // How far above the camera's top edge (L.bodyY) the vertical eject
-  // animation's start position sits. Safe to set above 0 only because
-  // drawPhotoCard hard-clips the card to L.bodyY and below on every
-  // frame — this constant only affects how much eject motion is spent
-  // before the card is visible, never what actually renders/exports.
-  var VERTICAL_START_LIFT = 70;
+  // (Previously a fixed VERTICAL_START_LIFT constant set how far above
+  // L.bodyY the eject animation started, relying entirely on the clip
+  // below to hide the excess. Now cardTopAt starts the card exactly
+  // flush with L.bodyY (its own height above it) so it's genuinely
+  // fully hidden with no reliance on how big the lift constant happens
+  // to be relative to card height — see cardTopAt.)
 
   // Fixed top/bottom margin for vertical layout. Raised 40 -> 90 for
   // noticeably more breathing room around the camera+card group (the
@@ -185,12 +185,12 @@
     // on cameraCenter(). Height chosen (with that anchor) so even the
     // 3rd stacked photo's stack.y offset + drop shadow stay inside
     // L.bodyY..L.bodyY+L.bodyH — never pokes out past the camera body.
-    // horizontal card size reduced (480x380 -> 380x300, same ratio) so
-    // the ejected photo reads smaller relative to the camera body, per
-    // request — paired with cardLeftAt's wider endX so the smaller card
-    // still ends up ejecting almost to the canvas's right edge instead
-    // of leaving a large gap now that it's narrower.
-    horizontal: { w: 380, h: 300, side: "right",  margin: 76 }
+    // Width widened again (380 -> 620) so the fully-ejected card reaches
+    // almost to the canvas's right edge, per request — its left edge
+    // still overlaps the camera body (see cardLeftAt's endX), so the
+    // card visually stays attached to/emerging from the camera rather
+    // than floating away from it.
+    horizontal: { w: 620, h: 300, side: "right",  margin: 76 }
   };
 
   // horizontal (landscape) layout — card ejects sideways from under the
@@ -218,8 +218,11 @@
   // framing instead of empty padding.
   function computeVerticalLayout() {
     var VERTICAL_SCALE = 580 / 620;
+    // shoulderH now uses the same reduced value as the horizontal layout
+    // (94 -> 76, scaled) so vertical orientation gets the same shorter
+    // shoulder plate / larger card clearance that horizontal already has.
     var bodyW = 620 * VERTICAL_SCALE, bodyH = 424 * VERTICAL_SCALE,
-        bodyR = 36 * VERTICAL_SCALE, shoulderH = 94 * VERTICAL_SCALE;
+        bodyR = 36 * VERTICAL_SCALE, shoulderH = 76 * VERTICAL_SCALE;
     // Canvas height is now sized (in applyOrientationDims) to exactly fit
     // this content plus VERTICAL_MARGIN on each side, so bodyY is just
     // that fixed margin rather than a centering calc against a much
@@ -269,15 +272,25 @@
   }
 
   // horizontal orientation: card slides out sideways from under the
-  // camera body's right edge
+  // camera body's right edge.
+  // Start position (e=0) is exactly flush with the camera's right edge
+  // (startX + cardW === rightEdge) so the card's right edge never pokes
+  // out past the camera before the animation begins — combined with the
+  // hard clip in drawPhotoCard (x <= rightEdge), this guarantees nothing
+  // is visible at the very start of the eject.
+  // End position (e=1) keeps a small overlap with the camera body (so
+  // the card still reads as attached to/emerging from it) while
+  // extending the card almost to the canvas's right edge.
   function cardLeftAt(e, cardW, L) {
     var rightEdge = L.bodyX + L.bodyW;
-    var startX = rightEdge - cardW + 50;
-    // At full eject (e=1) the card stays anchored right at the camera
-    // body's edge (small overlap so it visually connects to the camera
-    // rather than floating away from it) — only the card's own size
-    // (CARD_DIMS.horizontal) was reduced, not how far it travels.
-    var endX = rightEdge - 20;
+    var startX = rightEdge - cardW;
+    // Small overlap (20px) keeps the card's left portion tucked under
+    // the camera body at full eject, same overlap style vertical uses
+    // at its bottom edge — CANVAS_EDGE_MARGIN keeps a bit of breathing
+    // room instead of touching the canvas's true edge.
+    var CANVAS_EDGE_MARGIN = 40;
+    var endX = Math.min(rightEdge - 20, W - cardW - CANVAS_EDGE_MARGIN);
+    endX = Math.max(endX, startX);
     return lerp(startX, endX, e);
   }
 
@@ -286,19 +299,13 @@
   // flush against the camera's bottom edge once fully ejected
   function cardTopAt(e, cardH, L) {
     var bodyBottom = L.bodyY + L.bodyH;
-    // Start position is L.bodyY - VERTICAL_START_LIFT (above the
-    // camera's own top edge) rather than flush with it or centered on
-    // card height. This relies entirely on drawPhotoCard's hard clip at
-    // L.bodyY (added alongside this): whatever part of the card sits
-    // above L.bodyY is clipped away every frame, in both preview and
-    // every export, so lifting this start position can never actually
-    // show or save anything above the camera — it only changes how much
-    // of the eject motion happens before the card first peeks out from
-    // under the camera body. (Previously this used
-    // max(bodyBottom - cardH + 56, ...), but that term doesn't scale
-    // with the vertical margin and silently overrode the lift once the
-    // margin grew — the lift is now applied directly.)
-    var startY = L.bodyY - VERTICAL_START_LIFT;
+    // Start position (e=0) is exactly flush with the camera's top edge
+    // (startY + cardH === L.bodyY), so the card's bottom edge never
+    // pokes below the camera's top edge before the animation begins —
+    // combined with drawPhotoCard's hard clip (y >= L.bodyY), this
+    // guarantees nothing is visible at the very start of the eject,
+    // regardless of how tall the card is.
+    var startY = L.bodyY - cardH;
     var endY = bodyBottom;
     return lerp(startY, endY, e);
   }
@@ -900,6 +907,17 @@ ctx.fill();
       // body's top edge.
       ctx.beginPath();
       ctx.rect(0, L.bodyY, W, H - L.bodyY);
+      ctx.clip();
+    } else {
+      // Mirrors the vertical clip above, at the camera body's left edge
+      // this time: nothing drawn for this card (fill OR its drop-shadow)
+      // can render to the left of L.bodyX. The card ejects rightward, so
+      // its "still hidden inside the camera" portion is on the left —
+      // this guarantees no part of the card (or its shadow) ever shows
+      // past the camera body's left edge, however far right stack.x
+      // pushes an offset card.
+      ctx.beginPath();
+      ctx.rect(L.bodyX, 0, W - L.bodyX, H);
       ctx.clip();
     }
     if (stack.rot) {

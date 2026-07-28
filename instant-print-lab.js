@@ -1655,7 +1655,8 @@ var animMs = state.gifSeconds * photoCount * 1000;
         for (var vf = 0; vf <= animFrameCount; vf++) frameTs.push(vf / animFrameCount);
         for (var vh2 = 0; vh2 < holdFrameCount; vh2++) frameTs.push(1);
 
-        recorder.start();
+       // 1. recorder.start() -> recorder.start(100) 으로 변경
+        recorder.start(100); 
         statusText.textContent = "동영상 녹화 중…";
 
         var frameIdx = 0;
@@ -1676,17 +1677,18 @@ var animMs = state.gifSeconds * photoCount * 1000;
           } else {
             renderScene(octx, 1, videoExportState);
             if (manualFrames) track.requestFrame();
-            setTimeout(function () { recorder.stop(); }, 60);
+            
+            // 2. 딜레이시간을 60ms에서 2000ms(2초)로 변경
+            setTimeout(function () { recorder.stop(); }, 2000); 
           }
         }
         requestAnimationFrame(tick);
       } catch (errStart) {
-        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요. GIF 저장을 이용해 주세요.";
+        statusText.textContent = "이 브라우저에서는 동영상 저장을 지원하지 않아요.";
         resetVideoButtons();
       }
     });
   }
-
   // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------

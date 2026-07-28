@@ -678,8 +678,8 @@
     // so neither shape overlaps the body's border stroke, widened, and
     // the right-hand dial moved further right and away from the button
     // below it.
-    drawTopNub(ctx, bx + bw * 0.22, by - 12 * k, 34 * k, 10 * k, -0.05, shade(body, isDark ? 8 : -5));
-    drawGearedTopDial(ctx, bx + bw * 0.78, by - 12 * k, 60 * k, 8 * k, isDark);
+    drawTopNub(ctx, bx + bw * 0.22, by - 11 * k, 34 * k, 10 * k, 0, shade(body, isDark ? 8 : -5));
+    drawGearedTopDial(ctx, bx + bw * 0.78, by - 11 * k, 60 * k, 8 * k, isDark);
 
     // shoulder plate — a neutral silver-grey top panel, independent of the
     // body shell color (matches the reference: the top plate reads as a
@@ -707,7 +707,7 @@
     ctx.fillStyle = "#ffffff"; // 흰색 글씨
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("POLAROID", bx + bw * 0.06, shY);
+    ctx.fillText("MOMENT", bx + bw * 0.06, shY);
     ctx.restore();
     
     // red logo dot — moved left (closer to the wordmark) from 0.354 to 0.27

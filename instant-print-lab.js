@@ -154,7 +154,7 @@
   // Scene layout
   // ---------------------------------------------------------------------
 
-  var VERTICAL_MARGIN = 180;
+  var VERTICAL_MARGIN = 250;
 
   var CARD_DIMS = {
    

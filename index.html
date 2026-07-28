@@ -310,6 +310,26 @@ label.check input{accent-color:var(--accent);}
   gap:8px;
 }
 
+  .watermark{
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  padding:6px 10px;
+
+  background:rgba(255,255,255,0.75);
+  backdrop-filter:blur(6px);
+
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:999px;
+
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11px;
+  color:#666;
+
+  z-index:9999;
+  pointer-events:none;
+}
+
 @media (max-width:980px){
   .app{grid-template-columns:1fr;}
 }
@@ -452,7 +472,11 @@ label.check input{accent-color:var(--accent);}
     </div>
   </aside>
 </div>
-
+  
+<div class="watermark">
+  @yourid
+</div>
+  
 <script>
 // summary(헤더) 전체가 아니라 화살표(.chevron)를 눌렀을 때만 접고 펼치도록 함.
 // <summary> 클릭의 기본 토글 동작을 막고, 화살표 클릭 시에만 details.open을 반전시킴.

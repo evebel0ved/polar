@@ -1822,12 +1822,47 @@ var offset =
         }
         var mimeCandidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
         var mimeType = "";
+
+var candidates = [
+  "video/mp4;codecs=avc1",
+  "video/mp4",
+  "video/webm;codecs=vp9",
+  "video/webm;codecs=vp8",
+  "video/webm"
+];
+
+for (var i = 0; i < candidates.length; i++) {
+  if (MediaRecorder.isTypeSupported(candidates[i])) {
+    mimeType = candidates[i];
+    break;
+  }
+}
+
+console.log("Recording with:", mimeType);
         for (var m = 0; m < mimeCandidates.length; m++) {
           if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeCandidates[m])) {
             mimeType = mimeCandidates[m];
             break;
           }
         }
+        var mimeType = "";
+
+var candidates = [
+  "video/mp4;codecs=avc1",
+  "video/mp4",
+  "video/webm;codecs=vp9",
+  "video/webm;codecs=vp8",
+  "video/webm"
+];
+
+for (var i = 0; i < candidates.length; i++) {
+  if (MediaRecorder.isTypeSupported(candidates[i])) {
+    mimeType = candidates[i];
+    break;
+  }
+}
+
+console.log("Selected mimeType:", mimeType);
         var recorder = mimeType
           ? new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 })
           : new MediaRecorder(stream);
@@ -1840,15 +1875,27 @@ var offset =
           resetVideoButtons();
         };
         recorder.onstop = function () {
-          try {
-            var blob = new Blob(chunks, { type: mimeType || "video/webm" });
-            downloadBlob(blob, "instant-print-card.webm");
-            statusText.textContent = "동영상 저장 완료 (" + vw + "×" + vh + ")";
-          } catch (errStop) {
-            statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
-          }
-          resetVideoButtons();
-        };
+  try {
+
+    var actualType = recorder.mimeType || mimeType || "video/webm";
+    var ext = actualType.indexOf("mp4") !== -1 ? "mp4" : "webm";
+
+    var blob = new Blob(chunks, {
+      type: actualType
+    });
+
+    downloadBlob(blob, "polaroid." + ext);
+
+    statusText.textContent =
+      "동영상 저장 완료 (" + vw + "×" + vh + ")";
+
+  } catch (errStop) {
+    console.error(errStop);
+    statusText.textContent = "동영상 저장 중 오류가 발생했어요.";
+  }
+
+  resetVideoButtons();
+};
 
         var photoCountForHold = 1 + (state.photoImg2 ? 1 : 0) + (state.photoImg3 ? 1 : 0);
         var holdMs = photoCountForHold > 1 ? 1200 : 900;

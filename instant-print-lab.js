@@ -43,7 +43,7 @@
     bgColorIndex: 0,
     orientation: "vertical", //   "horizontal"
     captionText: "MOMENT",
-    serialText: "N° 01",       // customizable frame-number label printed on the card margin
+    serialText: "@evebel0ved",       // fixed credit label printed on the card margin
     photoImg: null,
     photoImg2: null,           // 2nd photo — only used for video (stacks on top of photo 1)
     photoImg3: null,           // 3rd photo — only used for video (stacks on top of photo 2)
@@ -73,7 +73,6 @@
   var photoInput3 = document.getElementById("photoInput3");
   var pickPhoto3Btn = document.getElementById("pickPhoto3");
   var photoStatus3 = document.getElementById("photoStatus3");
-  var serialInput = document.getElementById("serialInput");
   var cameraSwatchGrid = document.getElementById("cameraSwatchGrid");
   var bgSwatchGrid = document.getElementById("bgSwatchGrid");
   var orientVerticalBtn = document.getElementById("orientVertical");
@@ -1068,14 +1067,6 @@ ctx.fill();
   if (photoInput3) photoInput3.addEventListener("change", function (e) {
     if (e.target.files && e.target.files[0]) handlePhotoFile(e.target.files[0], 3);
   });
-
-  if (serialInput) {
-    serialInput.addEventListener("input", function () {
-      state.serialText = serialInput.value;
-      render();
-    });
-  }
-
 
   orientVerticalBtn.addEventListener("click", function () { setOrientation("vertical"); });
   orientHorizontalBtn.addEventListener("click", function () { setOrientation("horizontal"); });

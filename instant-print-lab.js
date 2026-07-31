@@ -43,7 +43,7 @@
     bgColorIndex: 0,
     orientation: "vertical", //   "horizontal"
     captionText: "MOMENT",
-    serialText: "@evebel0ved",       // fixed credit label printed on the card margin
+    serialText: "@atelier_eve",       // fixed credit label printed on the card margin
     photoImg: null,
     photoImg2: null,           // 2nd photo — only used for video (stacks on top of photo 1)
     photoImg3: null,           // 3rd photo — only used for video (stacks on top of photo 2)

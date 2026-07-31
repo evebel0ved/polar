@@ -882,7 +882,7 @@ ctx.fill();
       // vertical margin strip on the right
       var mCenterX = left + dims.w - dims.margin / 2;
       var serialMaxW = dims.margin - 10;
-      var serialSize = fitFontSize(ctx, serial, "'IBM Plex Mono', monospace", 13, serialMaxW);
+      var serialSize = fitFontSize(ctx, serial, "'IBM Plex Mono', monospace", 17, serialMaxW);
       ctx.fillStyle = "#9a968c";
       ctx.font = "500 " + serialSize + "px 'IBM Plex Mono', monospace";
       ctx.textAlign = "center";
@@ -900,7 +900,7 @@ ctx.fill();
       ctx.restore();
     } else {
       var bottomHalfW = dims.w / 2 - pad - 6;
-      var serialSizeB = fitFontSize(ctx, serial, "'IBM Plex Mono', monospace", 13, bottomHalfW);
+      var serialSizeB = fitFontSize(ctx, serial, "'IBM Plex Mono', monospace", 17, bottomHalfW);
       ctx.fillStyle = "#9a968c";
       ctx.font = "500 " + serialSizeB + "px 'IBM Plex Mono', monospace";
       ctx.textAlign = "left";
